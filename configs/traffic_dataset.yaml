@@ -1,0 +1,23 @@
+# =============================================================================
+# Traffic Dataset Configuration (YOLO format)
+# =============================================================================
+# Update paths after preparing the dataset on Colab/Azure
+
+# Paths (update these to match your Colab/VM directory structure)
+path: /content/datasets/sg_traffic        # Root dataset directory
+train: images/train                        # Train images (relative to path)
+val: images/val                            # Validation images (relative to path)
+test: images/test                          # Test images (relative to path)
+
+# Class definitions — traffic-relevant classes
+# Remapped from COCO to contiguous IDs for this project
+names:
+  0: car
+  1: motorcycle
+  2: bus
+  3: truck
+  4: person
+  5: bicycle
+
+# Number of classes
+nc: 6

@@ -1,0 +1,60 @@
+# =============================================================================
+# YOLOv11 Fine-Tuning Configuration for Singapore Traffic Detection
+# =============================================================================
+# Run on Colab/Kaggle with: yolo train cfg=configs/training_config.yaml
+# Or use the Python API: model.train(**config)
+
+# Model selection
+# Start with yolo11s.pt (9.4M params, best accuracy/efficiency for T4 GPU)
+model: yolo11s.pt
+
+# Dataset — update path to point to your prepared dataset
+data: configs/traffic_dataset.yaml
+
+# Training hyperparameters
+epochs: 100               # Will early-stop if validation loss plateaus
+patience: 15              # Early stopping patience (epochs without improvement)
+batch: 16                 # Fits in T4 15GB VRAM with yolo11s
+imgsz: 640                # Standard YOLO input size — increase to 1280 for HD cameras
+
+# Optimizer
+optimizer: AdamW
+lr0: 0.001                # Initial learning rate
+lrf: 0.01                 # Final learning rate as fraction of lr0
+momentum: 0.937
+weight_decay: 0.0005
+warmup_epochs: 3          # Warmup period
+
+# Augmentation — critical for traffic camera domain adaptation
+# Aggressive augmentation because Singapore cameras have diverse conditions
+hsv_h: 0.015              # Hue shift
+hsv_s: 0.7                # Saturation shift (handle rainy/foggy desaturation)
+hsv_v: 0.4                # Value/brightness shift (handle night vs day)
+degrees: 0.0              # No rotation (cameras are fixed)
+translate: 0.1            # Small translation
+scale: 0.5                # Scale augmentation (vehicles at various distances)
+shear: 0.0                # No shear (fixed camera angle)
+perspective: 0.0          # No perspective change
+flipud: 0.0               # No vertical flip (cars don't appear upside down)
+fliplr: 0.5               # Horizontal flip is fine
+mosaic: 1.0               # Mosaic augmentation — great for multi-scale
+mixup: 0.1                # Light mixup
+
+# Regularization
+dropout: 0.0              # Model-level dropout (YOLO handles this internally)
+close_mosaic: 10          # Disable mosaic for last 10 epochs (cleaner convergence)
+
+# Hardware
+device: 0                 # GPU 0 (Colab T4)
+workers: 2                # DataLoader workers (Colab has ~2 CPU cores)
+amp: true                 # Mixed precision (faster on T4)
+
+# Saving
+project: runs/train       # Output directory
+name: sg_traffic_v1       # Run name
+save_period: 10           # Save checkpoint every 10 epochs
+exist_ok: true            # Overwrite existing run
+
+# Logging
+verbose: true
+plots: true               # Generate training plots

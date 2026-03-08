@@ -1,0 +1,86 @@
+# =============================================================================
+# Singapore Smart City — Data Collection Configuration
+# =============================================================================
+# All API endpoints verified live as of March 9, 2026
+
+# -----------------------------------------------------------------------------
+# Data Source APIs (all data.gov.sg — free, no API key required)
+# -----------------------------------------------------------------------------
+apis:
+  traffic_images:
+    url: "https://api.data.gov.sg/v1/transport/traffic-images"
+    refresh_seconds: 20        # API updates every 20s
+    description: "90 LTA traffic cameras across Singapore"
+
+  taxi_availability:
+    url: "https://api.data.gov.sg/v1/transport/taxi-availability"
+    refresh_seconds: 30
+    description: "GPS positions of ~1450 available taxis"
+
+  air_temperature:
+    url: "https://api.data.gov.sg/v1/environment/air-temperature"
+    refresh_seconds: 60
+    description: "Real-time temperature from weather stations"
+
+  weather_forecast:
+    url: "https://api.data.gov.sg/v1/environment/24-hour-weather-forecast"
+    refresh_seconds: 300       # Updates less frequently
+    description: "Regional weather forecasts (5 regions)"
+
+  pm25:
+    url: "https://api.data.gov.sg/v1/environment/pm25"
+    refresh_seconds: 3600      # Hourly updates
+    description: "PM2.5 air quality readings per region"
+
+# -----------------------------------------------------------------------------
+# Collection Settings
+# -----------------------------------------------------------------------------
+collection:
+  interval_seconds: 60         # How often to run a collection cycle
+  output_dir: "data/raw"       # Root directory for collected data
+  max_retries: 3               # Retries per failed API call
+  retry_delay_seconds: 2       # Delay between retries (exponential backoff)
+  request_timeout_seconds: 30  # HTTP request timeout
+  max_concurrent_downloads: 20 # Parallel image downloads
+
+  # Image storage structure: {output_dir}/{date}/{camera_id}/{timestamp}.jpg
+  image_filename_format: "{timestamp}.jpg"
+  metadata_filename: "metadata.jsonl"  # One JSONL file per camera per day
+
+# -----------------------------------------------------------------------------
+# Camera Filter (optional — set to null to collect all cameras)
+# -----------------------------------------------------------------------------
+camera_filter:
+  # Set specific camera IDs to collect, or null for all 90
+  camera_ids: null
+  # Only collect cameras above this resolution (width)
+  min_resolution_width: null   # Set to 640 to skip 320x240 cameras
+
+# -----------------------------------------------------------------------------
+# Failure Analysis Thresholds
+# (Used later in Phase 5 — defined here for consistency)
+# -----------------------------------------------------------------------------
+failure_thresholds:
+  low_confidence_floor: 0.15     # Below this = likely false positive
+  low_confidence_ceiling: 0.25   # Between floor-ceiling = "maybe" detection
+  occlusion_iou: 0.7             # IoU above this = likely occlusion
+  night_brightness: 60           # Mean pixel intensity below this = night
+  duplicate_hash_window: 5       # Compare hash against last N frames
+
+# -----------------------------------------------------------------------------
+# Drift Detection Parameters
+# (Used later in Phase 5 — defined here for consistency)
+# -----------------------------------------------------------------------------
+drift_detection:
+  psi_threshold: 0.2            # PSI > 0.2 = significant data drift
+  ks_test_alpha: 0.05           # KS test significance level
+  rolling_window_minutes: 60    # Rolling window for metric computation
+  correlation_sigma: 2.0        # Flag concept drift if correlation shifts > 2σ
+
+# -----------------------------------------------------------------------------
+# Logging
+# -----------------------------------------------------------------------------
+logging:
+  level: "INFO"                  # DEBUG, INFO, WARNING, ERROR
+  log_file: "logs/collector.log"
+  console_output: true
