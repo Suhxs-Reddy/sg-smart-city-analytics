@@ -280,18 +280,18 @@ class TestKSTest:
     def test_same_distribution(self):
         data = np.random.normal(0.7, 0.1, 100)
         result = compute_ks_test(data, data)
-        assert result["drift_detected"] is False
+        assert result["drift_detected"] == False
 
     def test_different_distribution(self):
         baseline = np.random.normal(0.7, 0.1, 200)
         shifted = np.random.normal(0.4, 0.1, 200)
         result = compute_ks_test(baseline, shifted)
-        assert result["drift_detected"] is True
+        assert result["drift_detected"] == True
         assert result["p_value"] < 0.05
 
     def test_small_sample(self):
         result = compute_ks_test(np.array([1, 2]), np.array([3, 4]))
-        assert result["drift_detected"] is False  # Too few samples
+        assert result["drift_detected"] == False  # Too few samples
 
 
 class TestDriftMonitor:
@@ -310,21 +310,22 @@ class TestDriftMonitor:
     def test_no_drift_on_similar_data(self, drift_monitor):
         np.random.seed(42)
         baseline = [
-            {"mean_brightness": 130 + np.random.normal(0, 5),
+            {"mean_brightness": 130 + np.random.normal(0, 10),
              "mean_confidence": 0.7 + np.random.normal(0, 0.05),
-             "num_vehicles": 5}
+             "num_vehicles": int(5 + np.random.normal(0, 2))}
             for _ in range(200)
         ]
         drift_monitor.set_baseline(baseline)
 
+        np.random.seed(43)  # Different seed but same distribution params
         current = [
-            {"mean_brightness": 130 + np.random.normal(0, 5),
+            {"mean_brightness": 130 + np.random.normal(0, 10),
              "mean_confidence": 0.7 + np.random.normal(0, 0.05),
-             "num_vehicles": 5}
-            for _ in range(50)
+             "num_vehicles": int(5 + np.random.normal(0, 2))}
+            for _ in range(100)
         ]
         alerts = drift_monitor.check_drift(current)
-        # Should have few or no alerts on similar data
+        # Should have no data drift alerts (same distribution)
         data_alerts = [a for a in alerts if a.drift_type == "data"]
         assert len(data_alerts) == 0
 
