@@ -1,0 +1,291 @@
+<current_dom_explanation>
+This is a temporary snapshot of the current page's DOM structure. The DOM will change if you navigate to or interact with another page. Use a tool like browser_get_dom to capture and preserve the DOM in your trajectory if needed for later reference.
+</current_dom_explanation>
+<current_dom>
+Skip to main content
+[0] (31,74)<a aria-label='View in Google Drive' href='https://drive.google.com/drive/search?q=owner%3Ame%20(type%3Aapplication%2Fvnd.google.colaboratory%20%7C%7C%20type%3Aapplication%2Fvnd.google.colab)&authuser=0' />
+	[1] (31,40)<md-icon  />
+[2] (71,66)<div class='goog-menu-button goog-inline-block' id='file-menu-button' role='button' />
+	[3] (71,66)<div  />
+		[4] (71,66)<div  />
+			[5] (71,66)<div >File />
+[6] (105,66)<div class='goog-menu-button goog-inline-block' id='edit-menu-button' role='button' />
+	[7] (105,66)<div  />
+		[8] (105,66)<div  />
+			[9] (105,66)<div >Edit />
+[10] (142,66)<div class='goog-menu-button goog-inline-block' id='view-menu-button' role='button' />
+	[11] (142,66)<div  />
+		[12] (142,66)<div  />
+			[13] (142,66)<div >View />
+[14] (184,66)<div class='goog-menu-button goog-inline-block' id='insert-menu-button' role='button' />
+	[15] (184,66)<div  />
+		[16] (184,66)<div  />
+			[17] (184,66)<div >Insert />
+[18] (236,66)<div class='goog-menu-button goog-inline-block' id='runtime-menu-button' role='button' />
+	[19] (236,66)<div  />
+		[20] (236,66)<div  />
+			[21] (236,66)<div >Runtime />
+[22] (286,66)<div class='goog-menu-button goog-inline-block' id='tools-menu-button' role='button' />
+	[23] (286,66)<div  />
+		[24] (286,66)<div  />
+			[25] (286,66)<div >Tools />
+[26] (326,66)<div class='goog-menu-button goog-inline-block' id='help-menu-button' role='button' />
+	[27] (326,66)<div  />
+		[28] (326,66)<div  />
+			[29] (326,66)<div >Help />
+[30] (822,42)<button aria-label='Open settings' class='icon-button  standard ' id='button' />
+	[31] (822,42)<span  />
+settings
+[32] (892,42)<md-filled-tonal-button >Share />
+	[33] (891,42)<button aria-label='Share notebook' class='button' id='button' />
+		[34] (892,42)<span  />
+	[35] (872,42)<md-icon >link />
+[36] (967,42)<a aria-label='Google Account: Howle  
+(howle1457@gmail.com)' class='gb_B gb_0a gb_1' href='https://accounts.google.com/SignOutOptions?hl=en&continue=https://colab.research.google.com/github/Suhxs-Reddy/sg-smart-city-analytics/blob/main/notebooks/collect_data.ipynb&ec=GBRAqQM' role='button' />
+[37] (63,111)<md-text-button >Show command palette
+⌘/Ctrl+Shift+P />
+	[38] (61,111)<button class='button' id='button' />
+		[39] (63,111)<span  />
+	[40] (28,111)<md-icon >search />
+	Show command palette
+	⌘/Ctrl+Shift+P
+Commands
+[41] (141,111)<md-text-button >Insert code cell below
+⌘/Ctrl+M B />
+	[42] (140,111)<button class='button' id='button' />
+		[43] (141,111)<span  />
+	[44] (124,111)<md-icon >add />
+	Insert code cell below
+	⌘/Ctrl+M B
+Code
+[45] (181,111)<md-icon >arrow_drop_down />
+[46] (221,111)<md-text-button >Add text cell />
+	[47] (219,111)<button class='button' id='button' />
+		[48] (221,111)<span  />
+	[49] (206,111)<md-icon >add />
+	Add text cell
+Text
+[50] (288,111)<md-text-button >Run all cells in notebook />
+	[51] (287,111)<button class='button' id='button' />
+		[52] (288,111)<span  />
+	[53] (267,111)<md-icon >play_arrow />
+	Run all cells in notebook
+Run all
+[54] (332,111)<md-icon >arrow_drop_down />
+[55] (389,111)<md-text-button  />
+	[56] (389,111)<button class='button' id='button' />
+		[57] (389,111)<span  />
+Copy to Drive
+[58] (907,111)<md-text-button >Connect to a new runtime />
+	[59] (907,111)<button class='button' id='button' />
+		[60] (907,111)<span  />
+	Connect to a new runtime
+Connect
+[61] (947,111)<md-icon >arrow_drop_down />
+[62] (972,111)<md-icon >expand_less />
+[63] (30,186)<button aria-label='Table of contents' class='icon-button  standard ' id='button' />
+	[64] (30,186)<span  />
+format_list_bulleted
+[65] (30,244)<button aria-label='Find and replace' class='icon-button  standard ' id='button' />
+	[66] (30,244)<span  />
+find_in_page
+[67] (30,302)<button aria-label='Code snippets' class='icon-button  standard ' id='button' />
+	[68] (30,302)<span  />
+code
+[69] (30,361)<button aria-label='Data inspector' class='icon-button  standard ' id='button' />
+	[70] (30,361)<span  />
+eye_tracking
+[71] (30,419)<button aria-label='Secrets' class='icon-button  standard ' id='button' />
+	[72] (30,419)<span  />
+vpn_key
+[73] (30,477)<button aria-label='Files' class='icon-button  standard ' id='button' />
+	[74] (30,477)<span  />
+folder
+[75] (30,536)<button aria-label='Data explorer' class='icon-button  standard ' id='button' />
+	[76] (30,536)<span  />
+table
+[77] (522,545)<colab-scroller aria-label='Notebook' class='notebook-container' id='notebook-main' role='main' scrollable='true' />
+	arrow_upward
+	[78] (862,182)<md-icon >arrow_downward />
+	[79] (888,182)<md-icon >edit />
+	[80] (915,182)<md-icon >delete />
+	[81] (942,182)<md-icon >more_vert />
+	[82] (75,232)<button aria-label='Collapse 6 child cells under 🇸🇬 Singapore Smart City — Data Collector (Press <Shift> to also collapse sibling sections)' class='icon-button  standard ' id='button' />
+		[83] (75,232)<span  />
+	keyboard_arrow_down
+	🇸🇬 Singapore Smart City — Data Collector
+	Collects traffic images + metadata from all 90 LTA cameras every 60 seconds.
+Data persists to Google Drive.
+	Run time:
+	6-12 hours per session |
+	Data rate:
+	~50MB/hour |
+	GPU:
+	Not needed
+	[84] (110,417)<button aria-label='Run cell' id='run-button' />
+		[85] (110,419)<span  />
+	[ ]
+	[86] (547,450)<div class='view-lines monaco-mouse-cursor-text' role='presentation' />
+		[87] (547,418)<div  />
+			[88] (293,418)<span  />
+				[89] (293,418)<span ># 1. Mount Google Drive for persistent storage />
+		[90] (547,443)<div  />
+			[91] (237,443)<span  />
+				[92] (146,443)<span >from />
+				[93] (209,443)<span >google.colab />
+				[94] (279,443)<span >import />
+				[95] (321,443)<span >drive />
+		[96] (547,469)<div  />
+			[97] (234,468)<span  />
+				[98] (170,468)<span >drive.mount />
+				[99] (212,468)<span >( />
+				[100] (219,468)<span >' />
+				[101] (272,468)<span >/content/drive />
+				[102] (325,468)<span >' />
+				[103] (332,468)<span >) />
+	[104] (110,536)<button aria-label='Run cell' id='run-button' />
+		[105] (110,537)<span  />
+	[ ]
+	[106] (590,568)<div class='view-lines monaco-mouse-cursor-text' role='presentation' />
+		[107] (590,536)<div  />
+			[108] (265,536)<span  />
+				[109] (265,536)<span ># 2. Clone repo & install dependencies />
+		[110] (590,561)<div  />
+			[111] (571,561)<span  />
+				[112] (135,561)<span >! />
+				[113] (174,561)<span >git clone />
+				[114] (385,561)<span >https://github.com/Suhxs-Reddy/sg-smart-city-analy />
+				[115] (588,561)<span >tics.git />
+				[116] (620,561)<span  />
+				[117] (627,561)<span >2 />
+				[118] (680,561)<span >>/dev/null || />
+				[119] (732,561)<span >( />
+				[120] (869,561)<span >cd sg-smart-city-analytics && git pull />
+		[121] (590,587)<div  />
+			[122] (342,586)<span  />
+				[123] (135,586)<span >! />
+				[124] (314,586)<span >pip install -q aiohttp Pillow imagehash pyyaml cli />
+				[125] (521,586)<span >ck pandas />
+	[126] (110,654)<button aria-label='Run cell' id='run-button' />
+		[127] (110,655)<span  />
+	[ ]
+	[128] (547,875)<div class='view-lines monaco-mouse-cursor-text' role='presentation' />
+		[129] (547,654)<div  />
+			[130] (226,654)<span  />
+				[131] (226,654)<span ># 3. Quick API health check />
+		[132] (547,679)<div  />
+			[133] (184,679)<span  />
+				[134] (153,679)<span >import />
+				[135] (205,679)<span >requests />
+		[136] (547,705)<div  />
+			[137] (160,704)<span  />
+				[138] (156,704)<span >apis = />
+				[139] (184,704)<span >{ />
+		[140] (547,730)<div  />
+			[141] (399,729)<span  />
+				[142] (146,729)<span  />
+				[143] (216,729)<span >'Traffic Images' />
+				[144] (279,729)<span >: />
+				[145] (290,729)<span >' />
+				[146] (469,729)<span >https://api.data.gov.sg/v1/transport/traffic-image />
+				[147] (648,729)<span >s />
+				[148] (655,729)<span >' />
+				[149] (662,729)<span >, />
+		[150] (547,755)<div  />
+			[151] (416,755)<span  />
+				[152] (146,755)<span  />
+				[153] (191,755)<span >'Weather' />
+				[154] (230,755)<span >: />
+				[155] (241,755)<span >' />
+				[156] (420,755)<span >https://api.data.gov.sg/v1/environment/24-hour-wea />
+				[157] (641,755)<span >ther-forecast />
+				[158] (690,755)<span >' />
+				[159] (697,755)<span >, />
+		[160] (547,780)<div  />
+			[161] (399,780)<span  />
+				[162] (146,780)<span  />
+				[163] (205,780)<span >'Temperature' />
+				[164] (258,780)<span >: />
+				[165] (269,780)<span >' />
+				[166] (448,780)<span >https://api.data.gov.sg/v1/environment/air-tempera />
+				[167] (637,780)<span >ture />
+				[168] (655,780)<span >' />
+				[169] (662,780)<span >, />
+		[170] (547,805)<div  />
+			[171] (339,805)<span  />
+				[172] (146,805)<span  />
+				[173] (184,805)<span >'PM2.5' />
+				[174] (216,805)<span >: />
+				[175] (227,805)<span >' />
+				[176] (381,805)<span >https://api.data.gov.sg/v1/environment/pm25 />
+				[177] (536,805)<span >' />
+				[178] (543,805)<span >, />
+		[179] (547,831)<div  />
+			[180] (374,830)<span  />
+				[181] (146,830)<span  />
+				[182] (181,830)<span >'Taxi' />
+				[183] (209,830)<span >: />
+				[184] (219,830)<span >' />
+				[185] (399,830)<span >https://api.data.gov.sg/v1/transport/taxi-availabi />
+				[186] (588,830)<span >lity />
+				[187] (606,830)<span >' />
+				[188] (613,830)<span >, />
+		[189] (547,856)<div  />
+			[190] (135,855)<span  />
+				[191] (135,855)<span >} />
+		[192] (547,881)<div  />
+			[193] (237,881)<span  />
+				[194] (142,881)<span >for />
+				[195] (191,881)<span >name, url />
+				[196] (237,881)<span >in />
+				[197] (283,881)<span >apis.items />
+				[198] (325,881)<span >( />
+				[199] (332,881)<span >) />
+				[200] (339,881)<span >: />
+		[201] (547,906)<div  />
+			[202] (262,906)<span  />
+				[203] (202,906)<span >r = requests.get />
+				[204] (276,906)<span >( />
+				[205] (325,906)<span >url, timeout= />
+				[206] (378,906)<span >10 />
+				[207] (388,906)<span >) />
+		[208] (547,931)<div  />
+			[209] (308,931)<span  />
+				[210] (177,931)<span >status = />
+				[211] (236,931)<span >'✅' />
+				[212] (252,931)<span  />
+				[213] (263,931)<span >if />
+				[214] (333,931)<span >r.status_code == />
+				[215] (407,931)<span >200 />
+				[216] (421,931)<span  />
+				[217] (438,931)<span >else />
+				[218] (456,931)<span  />
+				[219] (472,931)<span >'❌' />
+		print
+		(
+		f
+		'
+		{
+		status
+		}
+		{
+		name
+		}
+		: HTTP
+		{
+		r.status_code
+		}
+		'
+		)
+		# Camera count
+spark
+[220] (62,976)<md-text-button >Variables />
+	[221] (60,976)<button class='button' id='button' />
+		[222] (62,976)<span  />
+	[223] (32,976)<md-icon >data_object />
+[224] (154,976)<md-text-button >Terminal />
+	[225] (152,976)<button class='button' id='button' />
+		[226] (154,976)<span  />
+	[227] (125,976)<md-icon >terminal />
+
+</current_dom>

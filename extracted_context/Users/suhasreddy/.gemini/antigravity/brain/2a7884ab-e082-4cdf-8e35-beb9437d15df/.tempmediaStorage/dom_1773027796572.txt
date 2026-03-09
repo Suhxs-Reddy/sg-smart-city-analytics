@@ -1,0 +1,185 @@
+<current_dom_explanation>
+This is a temporary snapshot of the current page's DOM structure. The DOM will change if you navigate to or interact with another page. Use a tool like browser_get_dom to capture and preserve the DOM in your trajectory if needed for later reference.
+</current_dom_explanation>
+<current_dom>
+Skip to main content
+[0] (31,74)<a aria-label='View in Google Drive' href='https://drive.google.com/drive/search?q=owner%3Ame%20(type%3Aapplication%2Fvnd.google.colaboratory%20%7C%7C%20type%3Aapplication%2Fvnd.google.colab)&authuser=0' />
+	[1] (31,40)<md-icon  />
+[2] (137,29)<input aria-label='Notebook name' class='doc-name' id='doc-name' />
+[3] (208,29)<button aria-label='Star' class='icon-button  standard ' id='button' />
+	[4] (208,29)<span  />
+star
+[5] (231,29)<button aria-label='All changes saved' class='icon-button  standard ' id='button' />
+	[6] (231,29)<span  />
+cloud_done
+[7] (71,66)<div class='goog-menu-button goog-inline-block' id='file-menu-button' role='button' />
+	[8] (71,66)<div  />
+		[9] (71,66)<div  />
+			[10] (71,66)<div >File />
+[11] (105,66)<div class='goog-menu-button goog-inline-block' id='edit-menu-button' role='button' />
+	[12] (105,66)<div  />
+		[13] (105,66)<div  />
+			[14] (105,66)<div >Edit />
+[15] (142,66)<div class='goog-menu-button goog-inline-block' id='view-menu-button' role='button' />
+	[16] (142,66)<div  />
+		[17] (142,66)<div  />
+			[18] (142,66)<div >View />
+[19] (184,66)<div class='goog-menu-button goog-inline-block' id='insert-menu-button' role='button' />
+	[20] (184,66)<div  />
+		[21] (184,66)<div  />
+			[22] (184,66)<div >Insert />
+[23] (236,66)<div class='goog-menu-button goog-inline-block' id='runtime-menu-button' role='button' />
+	[24] (236,66)<div  />
+		[25] (236,66)<div  />
+			[26] (236,66)<div >Runtime />
+[27] (286,66)<div class='goog-menu-button goog-inline-block' id='tools-menu-button' role='button' />
+	[28] (286,66)<div  />
+		[29] (286,66)<div  />
+			[30] (286,66)<div >Tools />
+[31] (326,66)<div class='goog-menu-button goog-inline-block' id='help-menu-button' role='button' />
+	[32] (326,66)<div  />
+		[33] (326,66)<div  />
+			[34] (326,66)<div >Help />
+[35] (778,42)<button aria-label='Open comments pane' class='icon-button  standard ' id='button' />
+	[36] (778,42)<span  />
+comment
+[37] (822,42)<button aria-label='Open settings' class='icon-button  standard ' id='button' />
+	[38] (822,42)<span  />
+settings
+[39] (892,42)<md-filled-tonal-button >Share />
+	[40] (891,42)<button aria-label='Share notebook' class='button' id='button' />
+		[41] (892,42)<span  />
+	[42] (872,42)<md-icon >people />
+[43] (967,42)<a aria-label='Google Account: Howle  
+(howle1457@gmail.com)' class='gb_B gb_0a gb_1' href='https://accounts.google.com/SignOutOptions?hl=en&continue=https://colab.research.google.com/%3Fpli%3D1&ec=GBRAqQM' role='button' />
+[44] (63,111)<md-text-button >Show command palette
+⌘/Ctrl+Shift+P />
+	[45] (61,111)<button class='button' id='button' />
+		[46] (63,111)<span  />
+	[47] (28,111)<md-icon >search />
+	Show command palette
+	⌘/Ctrl+Shift+P
+Commands
+[48] (141,111)<md-text-button >Insert code cell below
+⌘/Ctrl+M B />
+	[49] (140,111)<button class='button' id='button' />
+		[50] (141,111)<span  />
+	[51] (124,111)<md-icon >add />
+	Insert code cell below
+	⌘/Ctrl+M B
+Code
+[52] (181,111)<md-icon >arrow_drop_down />
+[53] (221,111)<md-text-button >Add text cell />
+	[54] (219,111)<button class='button' id='button' />
+		[55] (221,111)<span  />
+	[56] (206,111)<md-icon >add />
+	Add text cell
+Text
+[57] (288,111)<md-text-button >Run all cells in notebook />
+	[58] (287,111)<button class='button' id='button' />
+		[59] (288,111)<span  />
+	[60] (267,111)<md-icon >play_arrow />
+	Run all cells in notebook
+Run all
+[61] (332,111)<md-icon >arrow_drop_down />
+[62] (870,111)<button aria-label='Focus the last run cell' class='icon-button  standard ' id='button' />
+	[63] (870,111)<span  />
+done
+[64] (909,111)<md-text-button >Connected to
+Python 3 Google Compute Engine backend
+RAM: 1.33 GB/12.67 GB
+Disk: 21.32 GB/107.72 GB />
+	[65] (909,111)<button class='button' id='button' />
+		[66] (909,111)<span  />
+	Connected to
+Python 3 Google Compute Engine backend
+RAM: 1.33 GB/12.67 GB
+Disk: 21.32 GB/107.72 GB
+RAM
+Disk
+[67] (947,111)<md-icon >arrow_drop_down />
+[68] (972,111)<md-icon >expand_less />
+[69] (30,186)<button aria-label='Table of contents' class='icon-button  standard ' id='button' />
+	[70] (30,186)<span  />
+format_list_bulleted
+[71] (30,244)<button aria-label='Find and replace' class='icon-button  standard ' id='button' />
+	[72] (30,244)<span  />
+find_in_page
+[73] (30,302)<button aria-label='Code snippets' class='icon-button  standard ' id='button' />
+	[74] (30,302)<span  />
+code
+[75] (30,361)<button aria-label='Data inspector' class='icon-button  standard ' id='button' />
+	[76] (30,361)<span  />
+eye_tracking
+[77] (30,419)<button aria-label='Secrets' class='icon-button  standard ' id='button' />
+	[78] (30,419)<span  />
+vpn_key
+[79] (30,477)<button aria-label='Files' class='icon-button  standard ' id='button' />
+	[80] (30,477)<span  />
+folder
+[81] (30,536)<button aria-label='Data explorer' class='icon-button  standard ' id='button' />
+	[82] (30,536)<span  />
+table
+[83] (348,545)<colab-scroller aria-label='Notebook' class='notebook-container' id='notebook-main' role='main' scrollable='true' />
+[84] (647,545)<div  />
+[85] (712,188)<md-primary-tab class='selected-tab' />
+	[86] (712,188)<div  />
+		[87] (712,188)<div  />
+			[88] (712,188)<span >Release notes />
+[89] (932,186)<button aria-label='More tab actions' class='icon-button  standard ' id='button' />
+	[90] (932,186)<span  />
+more_vert
+[91] (967,186)<button aria-label='Close all tabs' class='icon-button  standard ' id='button' />
+	[92] (967,186)<span  />
+close
+[93] (819,577)<colab-scroller class='layout vertical grow' scrollable='true' />
+	Please follow our
+	[94] (770,242)<a aria-label='blog Link will open in a new tab' href='https://www.google.com/url?q=https%3A%2F%2Fmedium.com%2Fgoogle-colab'>blog />
+	to see more
+information about new features, tips and tricks, and featured notebooks such as
+	[95] (802,288)<a aria-label='Analyzing a Bank Failure with Colab Link will open in a new tab' href='https://www.google.com/url?q=https%3A%2F%2Fmedium.com%2Fgoogle-colab%2Fnoteworthy-notebooks-3-analyzing-a-bank-failure-with-colab-d23b372de313'>Analyzing a Bank Failure with Colab />
+	.
+	2026-02-23
+	Enterprise Runtimes are now available in Colab - get the familiar notebook you love with the enterprise power you need (
+	[96] (876,413)<a aria-label='learn more Link will open in a new tab' href='https://www.google.com/url?q=https%3A%2F%2Fblog.jetbrains.com%2Fpycharm%2F2026%2F01%2Fgoogle-colab-support-is-now-available-in-pycharm-2025-3-2%2F'>learn more />
+	):
+	Persistent runtimes
+	Configurable hardware & powerful GPUs
+	Seamless Vertex AI & BigQuery integration
+	Scale from idea to production without leaving your notebook.
+	Launched official PyCharm Colab extension.
+	[97] (730,591)<a aria-label='Learn more. Link will open in a new tab' href='https://www.google.com/url?q=https%3A%2F%2Fblog.jetbrains.com%2Fpycharm%2F2026%2F01%2Fgoogle-colab-support-is-now-available-in-pycharm-2025-3-2%2F'>Learn more. />
+	Published Colab's CPU Docker runtime image to us-docker.pkg.dev/colab-images/public/cpu-runtime
+	Python package upgrades
+	bigframes 2.31.0 -> 2.35.0
+	bokeh 3.7.3 -> 3.8.2
+	cudf-cu12 25.10.0 -> 26.2.1
+	cudf-polars-cu12 25.10.0 -> 26.2.1
+	cuml-cu12 25.10.0 -> 26.2.0
+	cupy-cuda12x 13.6.0 -> 14.0.1
+	dask 2025.9.1 -> 2026.1.2
+	dask-cuda 25.10.0 -> 26.2.0
+	dask-cudf-cu12 25.10.0 -> 26.2.1
+	fastapi: 0.123.10 -> 0.133.0
+	google-adk 1.21.0 -> 1.25.1
+	google-auth 2.43.0 -> 2.47.0
+	google-genai 1.55.0 -> 1.64.0
+spark
+[98] (852,976)<md-text-button >8:42 PM />
+	[99] (850,976)<button class='button' id='button' />
+		[100] (852,976)<span  />
+	[101] (827,976)<md-icon >error />
+[102] (939,976)<md-text-button >Python 3 />
+	[103] (937,976)<button class='button' id='button' />
+		[104] (939,976)<span  />
+	[105] (910,976)<md-icon >dns />
+[106] (62,976)<md-text-button >Variables />
+	[107] (60,976)<button class='button' id='button' />
+		[108] (62,976)<span  />
+	[109] (32,976)<md-icon >data_object />
+[110] (154,976)<md-text-button >Terminal />
+	[111] (152,976)<button class='button' id='button' />
+		[112] (154,976)<span  />
+	[113] (125,976)<md-icon >terminal />
+
+</current_dom>

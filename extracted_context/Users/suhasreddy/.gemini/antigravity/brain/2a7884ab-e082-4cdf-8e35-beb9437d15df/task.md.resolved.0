@@ -1,0 +1,22 @@
+# Smart City — Dataset, Failure Analytics & Drift Detection
+
+## Phase 1: Publishable Dataset Collection Pipeline
+- [ ] Data collector — automated image scraper with rich metadata
+- [ ] Multi-modal enrichment — weather, taxi, air quality per snapshot
+- [ ] Dataset formatter — YOLO annotation pipeline + Kaggle-ready packaging
+- [ ] Dataset documentation — datacard, statistics, EDA notebook
+
+## Phase 2: Failure Analytics
+- [ ] Failure taxonomy — define and classify detection failure modes
+- [ ] Failure analysis pipeline — automated detection of failure cases
+- [ ] Failure report generator — per-camera and per-condition reporting
+
+## Phase 3: Model Drift Detection
+- [ ] Drift monitor — statistical drift detection on predictions over time
+- [ ] Drift dashboard metrics — confidence, class distribution, detection count tracking
+- [ ] Automated alerts — threshold-based drift alerting with root cause hints
+
+## Phase 4: Integration & Packaging
+- [ ] End-to-end config — YAML-driven pipeline configuration
+- [ ] README & docs update — reflect new capabilities
+- [ ] Kaggle dataset card — metadata, citation, license for publishing

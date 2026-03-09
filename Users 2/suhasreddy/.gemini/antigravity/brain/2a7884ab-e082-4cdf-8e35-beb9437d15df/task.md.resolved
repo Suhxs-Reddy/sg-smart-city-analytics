@@ -1,0 +1,55 @@
+# Smart City — Full Project Checklist
+
+## Phase 1: Data Collection ✅ (committed)
+- [x] [src/ingestion/collector.py](file:///Users/suhasreddy/Documents/Computer%20vision%20Projects/sg-smart-city-analytics/src/ingestion/collector.py) — async 90-camera scraper + multi-modal metadata
+- [x] [src/ingestion/dataset_formatter.py](file:///Users/suhasreddy/Documents/Computer%20vision%20Projects/sg-smart-city-analytics/src/ingestion/dataset_formatter.py) — Kaggle dataset formatter
+- [x] [configs/collection_config.yaml](file:///Users/suhasreddy/Documents/Computer%20vision%20Projects/sg-smart-city-analytics/configs/collection_config.yaml) — all API endpoints verified
+- [x] [tests/test_collector.py](file:///Users/suhasreddy/Documents/Computer%20vision%20Projects/sg-smart-city-analytics/tests/test_collector.py) — 25 unit tests
+- [ ] Deploy collector to Azure B1s VM
+
+## Phase 2: Detection ✅ (committed)
+- [x] [src/detection/detector.py](file:///Users/suhasreddy/Documents/Computer%20vision%20Projects/sg-smart-city-analytics/src/detection/detector.py) — YOLOv11 wrapper + auto-labeling
+- [x] [configs/training_config.yaml](file:///Users/suhasreddy/Documents/Computer%20vision%20Projects/sg-smart-city-analytics/configs/training_config.yaml) — fine-tuning hyperparams for T4
+- [x] [configs/traffic_dataset.yaml](file:///Users/suhasreddy/Documents/Computer%20vision%20Projects/sg-smart-city-analytics/configs/traffic_dataset.yaml) — 6-class traffic dataset
+- [ ] Fine-tune YOLOv11 on UA-DETRAC (Colab/Kaggle)
+
+## Phase 3: Tracking ✅ (committed)
+- [x] [src/tracking/tracker.py](file:///Users/suhasreddy/Documents/Computer%20vision%20Projects/sg-smart-city-analytics/src/tracking/tracker.py) — BoT-SORT + congestion scoring
+
+## Phase 4: Analytics ✅ (committed)
+- [x] [src/analytics/failure_analyzer.py](file:///Users/suhasreddy/Documents/Computer%20vision%20Projects/sg-smart-city-analytics/src/analytics/failure_analyzer.py) — 6-category failure taxonomy
+- [x] [src/analytics/drift_monitor.py](file:///Users/suhasreddy/Documents/Computer%20vision%20Projects/sg-smart-city-analytics/src/analytics/drift_monitor.py) — PSI + KS-test drift detection
+- [x] [src/analytics/predictor.py](file:///Users/suhasreddy/Documents/Computer%20vision%20Projects/sg-smart-city-analytics/src/analytics/predictor.py) — LSTM + Graph Transformer predictor
+- [x] [src/analytics/benchmark.py](file:///Users/suhasreddy/Documents/Computer%20vision%20Projects/sg-smart-city-analytics/src/analytics/benchmark.py) — model comparison suite
+
+## Phase 5: API & Dashboard ✅ (committed)
+- [x] [src/api/server.py](file:///Users/suhasreddy/Documents/Computer%20vision%20Projects/sg-smart-city-analytics/src/api/server.py) — FastAPI with 10 endpoints
+- [ ] Frontend dashboard (React/Leaflet heatmap)
+
+## Phase 6: Engineering Quality ✅ (committed)
+- [x] Complete test suite (80 passing, 1 xfailed)
+- [x] Pipeline orchestrator ([src/pipeline.py](file:///Users/suhasreddy/Documents/Computer%20vision%20Projects/sg-smart-city-analytics/src/pipeline.py))
+- [x] Cloud execution scripts (Colab + Azure)
+- [x] Updated README + architecture diagram
+- [x] Git pushed (7 commits)
+- [x] Bug fixes: predictor shadowing, async mock, drift PSI
+
+## Phase 7: Execution (cloud, not local)
+- [x] Pipeline validated locally (90/90 cameras, 0 failures, 6.3s)
+- [x] All 5 Singapore APIs confirmed live
+- [x] [scripts/deploy_azure_vm.py](file:///Users/suhasreddy/Documents/Computer%20vision%20Projects/sg-smart-city-analytics/scripts/deploy_azure_vm.py) — auto-retry deployment (9 commits pushed)
+- [x] Repo made public for Colab access
+- [x] Colab notebooks created ([notebooks/collect_data.ipynb](file:///Users/suhasreddy/Documents/Computer%20vision%20Projects/sg-smart-city-analytics/notebooks/collect_data.ipynb), [notebooks/train_yolo.ipynb](file:///Users/suhasreddy/Documents/Computer%20vision%20Projects/sg-smart-city-analytics/notebooks/train_yolo.ipynb))
+- [x] **Data collection RUNNING on Colab** (90/90 per cycle → Google Drive)
+- [/] Azure VM deployment (capacity unavailable — auto-retry script ready)
+- [ ] Fine-tune YOLO on Kaggle (UA-DETRAC dataset)
+- [ ] Run tracking + analytics on collected data
+- [ ] Train prediction models
+- [ ] Build + deploy dashboard
+
+## Phase 8: Production Infrastructure (while data collects)
+- [ ] Dockerfile + docker-compose.yml
+- [ ] GitHub Actions CI (lint + test on push)
+- [ ] Makefile (one-command workflows)
+- [ ] requirements.txt lock + pyproject.toml
+- [ ] MLflow experiment tracking integration

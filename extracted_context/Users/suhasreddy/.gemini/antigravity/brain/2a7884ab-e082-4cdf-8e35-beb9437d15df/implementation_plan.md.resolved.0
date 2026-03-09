@@ -1,0 +1,186 @@
+# Publishable Singapore Traffic Dataset + Failure Analytics + Model Drift Detection
+
+Build a Kaggle-publishable dataset from Singapore's live traffic cameras, with a failure analysis framework and model drift monitoring — the three differentiators that turn this project from "standard portfolio" into "senior engineer-grade."
+
+---
+
+## Proposed Changes
+
+### Data Collection Pipeline
+
+#### [NEW] [collector.py](file:///Users/suhasreddy/Documents/Computer%20vision%20Projects/sg-smart-city-analytics/src/ingestion/collector.py)
+
+Automated, production-grade data collector that snapshots all 90 cameras every 60 seconds. Each snapshot is enriched with **multi-modal metadata** at capture time:
+
+- Downloads images from all cameras via `data.gov.sg` traffic-images API
+- For each collection cycle, also fetches: weather (temperature + forecast), taxi availability (GPS count per region), PM2.5 air quality, flood alerts
+- Saves images to `data/raw/{date}/{camera_id}/{timestamp}.jpg`
+- Writes a `metadata.jsonl` per camera per day with: timestamp, camera_id, GPS, weather condition, temperature, taxi_count_nearby, pm25, image_path, image_hash (SHA256)
+- Handles errors gracefully: retries, timeout handling, per-camera error logging
+- Supports `--duration` (hours), `--interval` (seconds), `--cameras` (subset) CLI args
+- Includes a **collection health dashboard** — prints live stats (cameras responding, errors, images collected)
+
+#### [NEW] [dataset_formatter.py](file:///Users/suhasreddy/Documents/Computer%20vision%20Projects/sg-smart-city-analytics/src/ingestion/dataset_formatter.py)
+
+Transforms raw collected data into a Kaggle-ready, publishable dataset:
+
+- Deduplicates images using perceptual hashing (identical frames from static cameras)
+- Organizes into Kaggle structure: `images/`, `metadata/`, `splits/`
+- Generates `train/val/test` splits stratified by: camera location, time-of-day (dawn/day/dusk/night), weather condition
+- Exports metadata as both CSV and Parquet
+- Computes and logs dataset statistics: images per camera, temporal distribution, weather distribution, resolution breakdown
+- Creates a `dataset_card.md` with Kaggle-standard documentation (description, columns, collection methodology, license, citation BibTeX)
+
+---
+
+### Failure Analytics
+
+#### [NEW] [failure_analyzer.py](file:///Users/suhasreddy/Documents/Computer%20vision%20Projects/sg-smart-city-analytics/src/analytics/failure_analyzer.py)
+
+Systematic detection failure analysis — the thing that separates juniors from seniors:
+
+- **Failure taxonomy** with 6 categories:
+  1. `LOW_CONFIDENCE` — detections below threshold but above a "maybe" floor (0.15–0.25)
+  2. `WEATHER_DEGRADED` — confidence drops correlated with rain/fog (cross-referenced with weather metadata)
+  3. `LOW_RESOLUTION` — cameras at 320×240 where small objects are missed
+  4. `OCCLUSION` — overlapping bounding boxes with IoU > 0.7
+  5. `NIGHT_MODE` — mean pixel intensity < 60 (dark frame)
+  6. `CAMERA_FAILURE` — blank/frozen/corrupted frames (image hash matches previous N frames)
+- For each failure, logs: failure_type, camera_id, timestamp, weather, confidence scores, image_path
+- Computes per-camera **reliability scores** — percentage of frames with successful detections by condition
+- Generates a `failure_report.json` with aggregated stats and a markdown summary
+
+#### [NEW] [failure_report_generator.py](file:///Users/suhasreddy/Documents/Computer%20vision%20Projects/sg-smart-city-analytics/src/analytics/failure_report_generator.py)
+
+Generates human-readable failure reports with visualizations:
+
+- Per-camera reliability heatmap (camera_id × condition → success rate)
+- Confidence distribution plots by weather condition
+- "Worst cameras" ranking with root cause analysis
+- Temporal failure patterns (does nighttime degrade camera X more than Y?)
+- Exports as markdown report + PNG charts saved to `docs/failure_reports/`
+
+---
+
+### Model Drift Detection
+
+#### [NEW] [drift_monitor.py](file:///Users/suhasreddy/Documents/Computer%20vision%20Projects/sg-smart-city-analytics/src/analytics/drift_monitor.py)
+
+Statistical model drift detection — proves you think about models in production:
+
+- **Data drift** — tracks input image statistics over time:
+  - Mean brightness, contrast, color histogram distribution
+  - Uses Population Stability Index (PSI) to detect distribution shift
+  - Alert when PSI > 0.2 (significant drift)
+- **Prediction drift** — tracks model output statistics:
+  - Mean confidence score per class over time (rolling 1-hour window)
+  - Class distribution ratio (% cars vs % buses vs % trucks)
+  - Detection count per frame (rolling average)
+  - Uses Kolmogorov-Smirnov test to detect prediction distribution changes
+- **Concept drift detection** — detects when the relationship between input and output changes:
+  - Tracks confidence × brightness correlation (should be stable)
+  - Flags when correlation coefficient shifts beyond 2σ
+- Stores metrics in `data/processed/drift_metrics.jsonl` with timestamps
+- Provides both **real-time** (during collection) and **batch** (post-hoc analysis) modes
+
+#### [NEW] [drift_dashboard.py](file:///Users/suhasreddy/Documents/Computer%20vision%20Projects/sg-smart-city-analytics/src/analytics/drift_dashboard.py)
+
+CLI-based drift visualization and alerting:
+
+- Prints rolling drift metrics to terminal with color-coded alerts (green/yellow/red)
+- Generates time-series plots of drift metrics saved to `docs/drift_reports/`
+- Exports drift summary as markdown report
+- Suggests root causes: "Drift detected at 18:00 — correlates with sunset, consider retraining night model"
+
+---
+
+### Configuration
+
+#### [NEW] [collection_config.yaml](file:///Users/suhasreddy/Documents/Computer%20vision%20Projects/sg-smart-city-analytics/configs/collection_config.yaml)
+
+Central YAML configuration for the entire pipeline:
+
+- API endpoints and refresh intervals
+- Collection parameters (duration, interval, output paths)
+- Failure analysis thresholds (confidence floor, occlusion IoU, brightness thresholds)
+- Drift detection parameters (PSI threshold, KS test alpha, rolling window size)
+- Kaggle dataset metadata (title, description, license)
+
+---
+
+### Documentation
+
+#### [MODIFY] [README.md](file:///Users/suhasreddy/Documents/Computer%20vision%20Projects/sg-smart-city-analytics/README.md)
+
+Add sections for dataset collection, failure analytics, and drift monitoring with usage examples.
+
+#### [NEW] [DATASET_CARD.md](file:///Users/suhasreddy/Documents/Computer%20vision%20Projects/sg-smart-city-analytics/docs/DATASET_CARD.md)
+
+Kaggle-standard dataset documentation including: description, collection methodology, column definitions, usage examples, license (ODbL — matching data.gov.sg), citation BibTeX.
+
+---
+
+## What Makes This Publishable & Novel
+
+> [!IMPORTANT]
+> Most traffic datasets are static snapshots. This dataset is **temporally continuous** (every 60s), **multi-modal** (traffic + weather + taxi + air quality), and **annotated with operational metadata** (camera reliability, weather conditions). That combination doesn't exist on Kaggle today.
+
+**Kaggle dataset name:** `Singapore Smart City Traffic — Multi-Modal Temporal Dataset`
+
+**Unique selling points:**
+1. **Temporal continuity** — not random snapshots, but continuous surveillance-style data
+2. **Multi-modal enrichment** — every image tagged with weather, taxi density, air quality
+3. **Failure annotations** — each frame has a quality/reliability label
+4. **Drift baselines** — published baseline drift metrics for benchmarking
+
+---
+
+## Verification Plan
+
+### Automated Tests
+
+All tests below will be run via `pytest` from the project root:
+
+```bash
+cd /Users/suhasreddy/Documents/Computer\ vision\ Projects/sg-smart-city-analytics
+python -m pytest tests/ -v
+```
+
+Tests to create:
+
+1. **`tests/test_collector.py`** — Tests for the data collector:
+   - Test API response parsing (mock the API, verify image download + metadata extraction)
+   - Test metadata JSONL format (verify all required fields present)
+   - Test error handling (simulate API timeout, 404, malformed response)
+   - Test deduplication hash computation
+
+2. **`tests/test_dataset_formatter.py`** — Tests for dataset formatting:
+   - Test train/val/test split ratios and stratification
+   - Test CSV/Parquet export correctness
+   - Test dataset statistics computation
+
+3. **`tests/test_failure_analyzer.py`** — Tests for failure analysis:
+   - Test each failure category detection (mock low-confidence detections, dark frames, etc.)
+   - Test reliability score computation
+   - Test failure report JSON structure
+
+4. **`tests/test_drift_monitor.py`** — Tests for drift detection:
+   - Test PSI computation with known distributions
+   - Test KS test alerting with synthetic drifted data
+   - Test rolling window metrics computation
+
+### Manual Verification
+
+1. **Live collection test** — Run the collector for 5 minutes against the real Singapore API:
+   ```bash
+   python -m src.ingestion.collector --duration 0.08 --interval 60
+   ```
+   Verify: images appear in `data/raw/`, metadata JSONL files are written, multi-modal data is present.
+
+2. **Dataset formatting test** — After collecting some data, run the formatter:
+   ```bash
+   python -m src.ingestion.dataset_formatter --input data/raw --output data/processed/kaggle_dataset
+   ```
+   Verify: Kaggle-ready folder structure, dataset_card.md generated, statistics printed.
+
+3. **User review** — The user should verify that the collected images look correct and the metadata makes sense by spot-checking a few entries.

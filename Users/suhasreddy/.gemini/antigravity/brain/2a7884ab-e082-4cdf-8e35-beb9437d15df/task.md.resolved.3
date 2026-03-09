@@ -1,0 +1,35 @@
+# Smart City — Full Project Checklist
+
+## Phase 1: Data Collection Pipeline (CPU — Azure/Colab)
+- [x] [requirements.txt](file:///Users/suhasreddy/Documents/Computer%20vision%20Projects/sg-smart-city-analytics/requirements.txt) — pin all dependencies
+- [x] [configs/collection_config.yaml](file:///Users/suhasreddy/Documents/Computer%20vision%20Projects/sg-smart-city-analytics/configs/collection_config.yaml) — API endpoints, intervals, paths
+- [x] [src/ingestion/collector.py](file:///Users/suhasreddy/Documents/Computer%20vision%20Projects/sg-smart-city-analytics/src/ingestion/collector.py) — multi-camera scraper + multi-modal metadata
+- [x] [tests/test_collector.py](file:///Users/suhasreddy/Documents/Computer%20vision%20Projects/sg-smart-city-analytics/tests/test_collector.py) — unit tests for the collector
+- [ ] Verify collector works against live API
+
+## Phase 2: Detection (GPU — Colab/Kaggle)
+- [ ] YOLO fine-tuning on UA-DETRAC (iterative runs)
+- [ ] BoxMOT tracking setup with pre-trained Re-ID
+- [ ] Weather classifier training (optional)
+
+## Phase 3: Kaggle Dataset Formatting
+- [ ] Auto-label all frames with fine-tuned YOLO
+- [ ] Stratified train/val/test splits
+- [ ] Dataset card, statistics, deduplication
+- [ ] Publish to Kaggle
+
+## Phase 4: Analytics + Prediction
+- [ ] Vehicle counting, speed estimation, congestion scoring
+- [ ] LSTM baseline → Graph + Transformer upgrade
+- [ ] Multi-modal prediction (weather × traffic × taxi)
+
+## Phase 5: Failure Analytics + Drift
+- [ ] 6-category failure taxonomy
+- [ ] Per-camera reliability scorecards
+- [ ] PSI/KS-test drift monitoring
+- [ ] Drift dashboard with root cause suggestions
+
+## Phase 6: Dashboard + Benchmarks
+- [ ] Geographic heatmap dashboard
+- [ ] YOLOv11 vs YOLOv8 benchmarks on Singapore data
+- [ ] Final documentation + Kaggle publishing

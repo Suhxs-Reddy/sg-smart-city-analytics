@@ -1,0 +1,182 @@
+<current_dom_explanation>
+This is a temporary snapshot of the current page's DOM structure. The DOM will change if you navigate to or interact with another page. Use a tool like browser_get_dom to capture and preserve the DOM in your trajectory if needed for later reference.
+</current_dom_explanation>
+<current_dom>
+Skip to main content
+File
+Edit
+View
+Insert
+Runtime
+Tools
+Help
+settings
+link
+Share
+search
+Show command palette
+⌘/Ctrl+Shift+P
+Commands
+add
+Insert code cell below
+⌘/Ctrl+M B
+Code
+arrow_drop_down
+add
+Add text cell
+Text
+play_arrow
+Run all cells in notebook
+Run all
+arrow_drop_down
+Copy to Drive
+done
+Connected to
+Python 3 Google Compute Engine backend
+RAM: 1.00 GB/12.67 GB
+Disk: 21.30 GB/107.72 GB
+RAM
+Disk
+arrow_drop_down
+expand_less
+format_list_bulleted
+find_in_page
+code
+eye_tracking
+vpn_key
+folder
+table
+[0] (522,545)<colab-scroller aria-label='Notebook' class='notebook-container' id='notebook-main' role='main' scrollable='true' />
+	keyboard_arrow_down
+	🇸🇬 Singapore Smart City — Data Collector
+	Collects traffic images + metadata from all 90 LTA cameras every 60 seconds.
+Data persists to Google Drive.
+	Run time:
+	6-12 hours per session |
+	Data rate:
+	~50MB/hour |
+	GPU:
+	Not needed
+	arrow_upward
+	arrow_downward
+	pen_spark
+	delete
+	more_vert
+	[ ]
+	# 1. Mount Google Drive for persistent storage
+	from
+	google.colab
+	import
+	drive
+	drive.mount
+	(
+	'
+	/content/drive
+	'
+	)
+	[ ]
+	# 2. Clone repo & install dependencies
+	!
+	git clone
+	https://github.com/Suhxs-Reddy/sg-smart-city-analy
+	tics.git
+	2
+	>/dev/null ||
+	(
+	cd sg-smart-city-analytics && git pull
+	!
+	pip install -q aiohttp Pillow imagehash pyyaml cli
+	ck pandas
+	[ ]
+	# 3. Quick API health check
+	import
+	requests
+	apis =
+	{
+	'Traffic Images'
+	:
+	'
+	https://api.data.gov.sg/v1/transport/traffic-image
+	s
+	'
+	,
+	'Weather'
+	:
+	'
+	https://api.data.gov.sg/v1/environment/24-hour-wea
+	ther-forecast
+	'
+	,
+	'Temperature'
+	:
+	'
+	https://api.data.gov.sg/v1/environment/air-tempera
+	ture
+	'
+	,
+	'PM2.5'
+	:
+	'
+	https://api.data.gov.sg/v1/environment/pm25
+	'
+	,
+	'Taxi'
+	:
+	'
+	https://api.data.gov.sg/v1/transport/taxi-availabi
+	lity
+	'
+	,
+	}
+	for
+	name, url
+	in
+	apis.items
+	(
+	)
+	:
+	r = requests.get
+	(
+	url, timeout=
+	10
+	)
+	status =
+	'✅'
+	if
+	r.status_code ==
+	200
+	else
+	'❌'
+	print
+	(
+	f
+	'
+	{
+	status
+	}
+	{
+	name
+	}
+	: HTTP
+	{
+	r.status_code
+	}
+	'
+	)
+	# Camera count
+spark
+dns
+Python 3
+data_object
+Variables
+terminal
+Terminal
+Warning: This notebook was not authored by Google
+This notebook is being loaded from
+[1] (465,443)<a href='https://github.com/Suhxs-Reddy/sg-smart-city-analytics/blob/main/notebooks/collect_data.ipynb' />
+	[2] (465,443)<b >GitHub />
+. It may request access to your data stored with Google, or read data and credentials from other sessions. Please review the source code before executing this notebook.
+Cancel
+Run anyway
+
+</current_dom>
