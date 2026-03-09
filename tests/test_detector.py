@@ -9,18 +9,14 @@ Tests cover:
 """
 
 import json
-from pathlib import Path
-from unittest.mock import patch, MagicMock
 
-import numpy as np
 import pytest
 
 from src.detection.detector import (
+    TRAFFIC_CLASSES,
     DetectionResult,
     generate_yolo_labels,
-    TRAFFIC_CLASSES,
 )
-
 
 # =============================================================================
 # Fixtures

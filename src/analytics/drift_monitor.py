@@ -9,13 +9,10 @@ Statistical drift detection using:
 No ML models — pure statistics for trustworthiness and explainability.
 """
 
-import json
 import logging
 from collections import deque
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
-from pathlib import Path
-from typing import Optional
 
 import numpy as np
 from scipy import stats as scipy_stats
@@ -121,7 +118,7 @@ class DriftAlert:
 class DriftMonitor:
     """Monitors model and data drift over time using statistical methods."""
 
-    def __init__(self, config: dict = None):
+    def __init__(self, config: dict | None = None):
         """
         Args:
             config: Drift detection configuration. Uses defaults if None.

@@ -13,9 +13,8 @@ Run on Colab/Kaggle with pre-processed test data.
 import json
 import logging
 import time
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 
@@ -81,7 +80,7 @@ class ModelBenchmark:
         self,
         model_path: str,
         model_name: str,
-        conditions: list[str] = None,
+        conditions: list[str] | None = None,
         max_images_per_condition: int = 500,
     ) -> list[BenchmarkResult]:
         """Benchmark a single model across conditions.
@@ -194,7 +193,7 @@ class ModelBenchmark:
                 models[r.model_name] = {}
             models[r.model_name][r.condition] = r.to_dict()
 
-        # Build comparison table (model × condition for key metrics)
+        # Build comparison table (model x condition for key metrics)
         comparison = {
             "models_compared": list(models.keys()),
             "conditions_tested": list(

@@ -29,15 +29,11 @@ Output structure:
     └── DATASET_CARD.md
 """
 
-import hashlib
 import json
 import logging
 import shutil
-from collections import defaultdict
 from pathlib import Path
-from typing import Optional
 
-import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -113,7 +109,7 @@ class DatasetFormatter:
         # Split per stratification group
         train_dfs, val_dfs, test_dfs = [], [], []
 
-        for key, group in df.groupby("strat_key"):
+        for _key, group in df.groupby("strat_key"):
             n = len(group)
             if n < 3:
                 train_dfs.append(group)
@@ -230,7 +226,7 @@ class DatasetFormatter:
 
     def format_dataset(
         self,
-        labels_dir: Optional[str] = None,
+        labels_dir: str | None = None,
         deduplicate: bool = True,
     ) -> dict:
         """Format the full dataset.

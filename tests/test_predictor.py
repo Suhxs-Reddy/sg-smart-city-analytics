@@ -9,22 +9,18 @@ Covers:
 - Dataset shape validation
 """
 
-import math
 
 import numpy as np
-import pytest
 import torch
 
 from src.analytics.predictor import (
-    TrafficLSTM,
-    SpatialTemporalPredictor,
-    TrafficTimeSeriesDataset,
     SpatialTemporalDataset,
-    PredictionTrainer,
-    prepare_features,
+    SpatialTemporalPredictor,
+    TrafficLSTM,
+    TrafficTimeSeriesDataset,
     build_adjacency_matrix,
+    prepare_features,
 )
-
 
 # =============================================================================
 # LSTM Tests

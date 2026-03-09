@@ -12,10 +12,9 @@ Designed to run on Colab/Kaggle T4 GPU.
 import json
 import logging
 import time
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 from PIL import Image
@@ -261,8 +260,8 @@ class TrafficDetector:
         self,
         image_dir: str,
         camera_id: str = "unknown",
-        output_jsonl: Optional[str] = None,
-        max_images: Optional[int] = None,
+        output_jsonl: str | None = None,
+        max_images: int | None = None,
     ) -> list[DetectionResult]:
         """Run detection on all images in a directory.
 

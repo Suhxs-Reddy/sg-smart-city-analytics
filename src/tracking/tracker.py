@@ -13,9 +13,8 @@ Designed to run on Colab/Kaggle T4 GPU.
 import json
 import logging
 import time
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 
@@ -138,8 +137,8 @@ class VehicleTracker:
         self,
         image_dir: str,
         camera_id: str = "unknown",
-        output_path: Optional[str] = None,
-        max_frames: Optional[int] = None,
+        output_path: str | None = None,
+        max_frames: int | None = None,
     ) -> TrackingResult:
         """Run tracking on a directory of sequential images.
 

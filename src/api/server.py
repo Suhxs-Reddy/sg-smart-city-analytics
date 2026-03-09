@@ -15,11 +15,9 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +53,7 @@ class AnalyticsStore:
         self.drift_alerts: list = []              # Recent drift alerts
         self.fleet_report: dict = {}              # Latest fleet report
         self.predictions: dict = {}               # camera_id → predicted counts
-        self.last_updated: Optional[str] = None
+        self.last_updated: str | None = None
 
     def update_detection(self, camera_id: str, result: dict):
         self.latest_detections[camera_id] = result
@@ -287,4 +285,4 @@ async def refresh_data(data_dir: str = "data/processed"):
 
     except Exception as e:
         logger.exception(f"Failed to refresh data: {e}")
-        raise HTTPException(500, f"Refresh failed: {e}")
+        raise HTTPException(500, f"Refresh failed: {e}") from e

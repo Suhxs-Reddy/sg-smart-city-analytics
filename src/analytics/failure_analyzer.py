@@ -4,7 +4,7 @@ Singapore Smart City — Detection Failure Analyzer
 6-category failure taxonomy for traffic camera detection:
 1. Low Confidence — detections below confidence floor
 2. Weather Degradation — rain/fog causing low visibility
-3. Low Resolution — cameras at 320×240 causing missed detections
+3. Low Resolution — cameras at 320x240 causing missed detections
 4. Occlusion — overlapping vehicles hiding detections
 5. Night Mode — low brightness causing feature loss
 6. Camera Failure — zero detections when traffic expected
@@ -15,10 +15,8 @@ Generates per-camera reliability scorecards and failure reports.
 import json
 import logging
 from collections import defaultdict
-from dataclasses import dataclass, field, asdict
-from datetime import datetime
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 
@@ -84,7 +82,7 @@ class CameraReliabilityCard:
 class FailureAnalyzer:
     """Analyzes detection results for failure patterns."""
 
-    def __init__(self, config: dict = None):
+    def __init__(self, config: dict | None = None):
         """
         Args:
             config: Failure threshold configuration. Uses defaults if None.
@@ -262,7 +260,7 @@ class FailureAnalyzer:
         # Group by time of day (rough buckets)
         time_reliability = defaultdict(list)
 
-        for report, det in zip(reports, detection_results):
+        for report, det in zip(reports, detection_results, strict=False):
             reliability_scores.append(report.reliability_score)
 
             if report.failure_flags:
@@ -327,7 +325,7 @@ class FailureAnalyzer:
     def generate_fleet_report(
         self,
         all_detection_results: dict[str, list[dict]],
-        output_path: Optional[str] = None,
+        output_path: str | None = None,
     ) -> dict:
         """Generate a report across all cameras.
 

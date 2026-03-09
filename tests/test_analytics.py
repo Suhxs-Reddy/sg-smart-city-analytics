@@ -11,24 +11,19 @@ Covers:
 - Drift alert generation
 """
 
-from collections import defaultdict
 
 import numpy as np
 import pytest
 
+from src.analytics.drift_monitor import (
+    DriftMonitor,
+    compute_ks_test,
+    compute_psi,
+)
 from src.analytics.failure_analyzer import (
     FailureAnalyzer,
     FailureCategory,
-    FailureReport,
-    CameraReliabilityCard,
 )
-from src.analytics.drift_monitor import (
-    DriftMonitor,
-    compute_psi,
-    compute_ks_test,
-    DriftAlert,
-)
-
 
 # =============================================================================
 # Fixtures
@@ -121,7 +116,7 @@ def camera_failure_detection():
 
 @pytest.fixture
 def low_res_detection():
-    """Detection from a 320×240 camera."""
+    """Detection from a 320x240 camera."""
     return {
         "camera_id": "1001",
         "timestamp": "2026-03-08T10:00:00+08:00",
@@ -280,18 +275,18 @@ class TestKSTest:
     def test_same_distribution(self):
         data = np.random.normal(0.7, 0.1, 100)
         result = compute_ks_test(data, data)
-        assert result["drift_detected"] == False
+        assert not result["drift_detected"]
 
     def test_different_distribution(self):
         baseline = np.random.normal(0.7, 0.1, 200)
         shifted = np.random.normal(0.4, 0.1, 200)
         result = compute_ks_test(baseline, shifted)
-        assert result["drift_detected"] == True
+        assert result["drift_detected"]
         assert result["p_value"] < 0.05
 
     def test_small_sample(self):
         result = compute_ks_test(np.array([1, 2]), np.array([3, 4]))
-        assert result["drift_detected"] == False  # Too few samples
+        assert not result["drift_detected"]  # Too few samples
 
 
 class TestDriftMonitor:

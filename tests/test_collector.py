@@ -9,29 +9,25 @@ Covers:
 - Collection cycle orchestration (with mocked APIs)
 """
 
-import asyncio
 import hashlib
 import json
-from datetime import datetime, timezone, timedelta
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
+from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock
 
 import aiohttp
+import pytest
 
 from src.ingestion.collector import (
-    SingaporeAPIClient,
-    DataCollector,
-    compute_image_hash,
-    extract_weather_condition,
-    extract_temperature,
-    extract_pm25,
-    count_nearby_taxis,
-    load_config,
     SGT,
+    DataCollector,
+    SingaporeAPIClient,
+    compute_image_hash,
+    count_nearby_taxis,
+    extract_pm25,
+    extract_temperature,
+    extract_weather_condition,
+    load_config,
 )
-
 
 # =============================================================================
 # Fixtures

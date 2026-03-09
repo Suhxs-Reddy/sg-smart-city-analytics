@@ -9,17 +9,14 @@ Two-stage prediction architecture:
 Both models are designed to train on Colab/Kaggle T4 GPU.
 """
 
-import json
 import logging
 import math
-from pathlib import Path
-from typing import Optional
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader, Dataset
 
 logger = logging.getLogger(__name__)
 
@@ -467,7 +464,7 @@ class PredictionTrainer:
         val_loader: DataLoader,
         epochs: int = 100,
         patience: int = 15,
-        save_path: Optional[str] = None,
+        save_path: str | None = None,
     ) -> dict:
         """Full training loop with early stopping.
 
@@ -533,7 +530,7 @@ class PredictionTrainer:
 
 def prepare_features(
     metadata_records: list[dict],
-    feature_columns: list[str] = None,
+    feature_columns: list[str] | None = None,
 ) -> np.ndarray:
     """Convert metadata records to a feature matrix for model input.
 

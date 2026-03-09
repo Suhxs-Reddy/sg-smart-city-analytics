@@ -17,9 +17,7 @@ Designed for Colab/Azure execution.
 import json
 import logging
 import time
-from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 import click
 
@@ -45,7 +43,7 @@ DEFAULT_DIRS = {
 class PipelineStage:
     """Base class for pipeline stages with standard I/O patterns."""
 
-    def __init__(self, name: str, dirs: dict = None):
+    def __init__(self, name: str, dirs: dict | None = None):
         self.name = name
         self.dirs = dirs or DEFAULT_DIRS
         self.start_time = None
@@ -74,15 +72,15 @@ class PipelineStage:
 class DetectionStage(PipelineStage):
     """Run YOLOv11 detection on all collected images."""
 
-    def __init__(self, dirs: dict = None):
+    def __init__(self, dirs: dict | None = None):
         super().__init__("Detection", dirs)
 
     def run(
         self,
-        input_dir: str = None,
+        input_dir: str | None = None,
         model_path: str = "models/yolo11s_traffic.pt",
         confidence: float = 0.25,
-        max_images_per_camera: Optional[int] = None,
+        max_images_per_camera: int | None = None,
     ) -> dict:
         """Run detection on collected data.
 
@@ -147,14 +145,14 @@ class DetectionStage(PipelineStage):
 class TrackingStage(PipelineStage):
     """Run BoT-SORT tracking on camera sequences."""
 
-    def __init__(self, dirs: dict = None):
+    def __init__(self, dirs: dict | None = None):
         super().__init__("Tracking", dirs)
 
     def run(
         self,
-        input_dir: str = None,
+        input_dir: str | None = None,
         model_path: str = "models/yolo11s_traffic.pt",
-        max_frames: Optional[int] = None,
+        max_frames: int | None = None,
     ) -> dict:
         from src.tracking.tracker import VehicleTracker, estimate_congestion_score
 
@@ -204,12 +202,12 @@ class TrackingStage(PipelineStage):
 class AnalyticsStage(PipelineStage):
     """Run failure analysis and drift monitoring."""
 
-    def __init__(self, dirs: dict = None):
+    def __init__(self, dirs: dict | None = None):
         super().__init__("Analytics", dirs)
 
-    def run(self, config: dict = None) -> dict:
-        from src.analytics.failure_analyzer import FailureAnalyzer
+    def run(self, config: dict | None = None) -> dict:
         from src.analytics.drift_monitor import DriftMonitor
+        from src.analytics.failure_analyzer import FailureAnalyzer
 
         det_dir = Path(self.dirs["detections"])
         output_dir = Path(self.dirs["analytics"])
@@ -269,7 +267,7 @@ class AnalyticsStage(PipelineStage):
 class LabelingStage(PipelineStage):
     """Auto-label collected images using fine-tuned YOLO."""
 
-    def __init__(self, dirs: dict = None):
+    def __init__(self, dirs: dict | None = None):
         super().__init__("Auto-Labeling", dirs)
 
     def run(
@@ -277,7 +275,7 @@ class LabelingStage(PipelineStage):
         model_path: str = "models/yolo11s_traffic.pt",
         confidence: float = 0.3,
     ) -> dict:
-        from src.detection.detector import TrafficDetector, generate_yolo_labels
+        from src.detection.detector import generate_yolo_labels
 
         det_dir = Path(self.dirs["detections"])
         label_dir = Path(self.dirs["dataset"]) / "labels"
@@ -315,10 +313,10 @@ class LabelingStage(PipelineStage):
 class DatasetStage(PipelineStage):
     """Format collected data into a Kaggle-ready dataset."""
 
-    def __init__(self, dirs: dict = None):
+    def __init__(self, dirs: dict | None = None):
         super().__init__("Dataset Formatting", dirs)
 
-    def run(self, labels_dir: Optional[str] = None) -> dict:
+    def run(self, labels_dir: str | None = None) -> dict:
         from src.ingestion.dataset_formatter import DatasetFormatter
 
         self._log_start(input=self.dirs["raw"])
@@ -342,7 +340,7 @@ class DatasetStage(PipelineStage):
 class SmartCityPipeline:
     """Full end-to-end pipeline orchestrator."""
 
-    def __init__(self, config: dict = None, dirs: dict = None):
+    def __init__(self, config: dict | None = None, dirs: dict | None = None):
         self.config = config or {}
         self.dirs = dirs or DEFAULT_DIRS
         self.results = {}
@@ -354,7 +352,7 @@ class SmartCityPipeline:
     def run_full(
         self,
         model_path: str = "models/yolo11s_traffic.pt",
-        max_images_per_camera: Optional[int] = None,
+        max_images_per_camera: int | None = None,
     ) -> dict:
         """Run the complete pipeline: detect → track → analyze → label → format.
 
