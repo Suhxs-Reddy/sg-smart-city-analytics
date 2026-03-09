@@ -16,17 +16,52 @@ L.Icon.Default.mergeOptions({
   shadowUrl,
 });
 
-// Mock Initial Data (Would be replaced by API calls to FastAPI)
-const MOCK_CAMERAS = [
-  { id: '1701', name: 'CTE/Braddell', lat: 1.34355, lng: 103.86019, status: 'Active', cars: 42, weather: 'Clear' },
-  { id: '1702', name: 'PIE/Adam', lat: 1.32759, lng: 103.81845, status: 'Active', cars: 120, weather: 'Rain' },
-  { id: '1703', name: 'ECP/Marina', lat: 1.29367, lng: 103.86794, status: 'Warning', cars: 15, weather: 'Fog' },
-  { id: '1704', name: 'AYE/Clementi', lat: 1.31215, lng: 103.76345, status: 'Active', cars: 85, weather: 'Clear' },
-  { id: '1705', name: 'KPE/Tampines', lat: 1.36544, lng: 103.90422, status: 'Active', cars: 60, weather: 'Clear' },
+// 3-Tier ML Architecture Payload Structure (To be fetched from Serverless Backend)
+const ML_PIPELINE_DATA = [
+  { 
+    id: '1701', 
+    name: 'CTE/Braddell', 
+    lat: 1.34355, lng: 103.86019, 
+    status: 'Active', 
+    l1_yolo_count: 42, 
+    weather: 'Clear',
+    l3_forecast_15m: 'Stable (+2%)',
+    l2_vlm_anomaly: null
+  },
+  { 
+    id: '1703', 
+    name: 'ECP/Marina', 
+    lat: 1.29367, lng: 103.86794, 
+    status: 'Critical Alert', 
+    l1_yolo_count: 0, 
+    weather: 'Heavy Rain',
+    l3_forecast_15m: 'Severe Cascade (+85%)',
+    l2_vlm_anomaly: 'Florence-2: "A multi-vehicle collision blocking all 3 lanes."'
+  },
+  { 
+    id: '1704', 
+    name: 'AYE/Clementi', 
+    lat: 1.31215, lng: 103.76345, 
+    status: 'Active', 
+    l1_yolo_count: 145, 
+    weather: 'Clear',
+    l3_forecast_15m: 'Increasing (+15%)',
+    l2_vlm_anomaly: null
+  },
+  { 
+    id: '1705', 
+    name: 'KPE/Tampines', 
+    lat: 1.36544, lng: 103.90422, 
+    status: 'Active', 
+    l1_yolo_count: 60, 
+    weather: 'Clear',
+    l3_forecast_15m: 'Clearing (-5%)',
+    l2_vlm_anomaly: null
+  },
 ];
 
 function App() {
-  const [cameras, setCameras] = useState(MOCK_CAMERAS);
+  const [cameras, setCameras] = useState(ML_PIPELINE_DATA);
 
   // Center of Singapore
   const position = [1.3521, 103.8198];
@@ -85,10 +120,11 @@ function App() {
                   </div>
                   <div className="cam-details">
                     <h4>{cam.name}</h4>
-                    <p>ID: {cam.id} • {cam.cars} vehicles</p>
+                    <p>L1 Count: {cam.l1_yolo_count} | L3 Forecast: {cam.l3_forecast_15m}</p>
+                    {cam.l2_vlm_anomaly && <p className="vlm-alert text-xs text-red-400 mt-1 italic">{cam.l2_vlm_anomaly}</p>}
                   </div>
                 </div>
-                <span className={`cam-status ${cam.status.toLowerCase()}`}>
+                <span className={`cam-status ${cam.status.includes('Alert') ? 'warning' : 'active'}`}>
                   {cam.status}
                 </span>
               </div>
@@ -122,9 +158,16 @@ function App() {
               <Popup className="custom-popup">
                 <div style={{ textAlign: 'center' }}>
                   <b style={{color: '#3b82f6', fontSize: '14px'}}>{cam.name}</b><br />
-                  <span>{cam.cars} Vehicles Detected</span>
+                  <span style={{fontWeight: 'bold'}}>YOLO Count: {cam.l1_yolo_count}</span>
+                  <br />
+                  <span style={{color: '#8b5cf6', fontSize: '12px'}}>T+15 Forecast: {cam.l3_forecast_15m}</span>
                   <br />
                   <span style={{color: '#94a3b8', fontSize: '11px'}}>Weather: {cam.weather}</span>
+                  {cam.l2_vlm_anomaly && (
+                    <div style={{marginTop: '4px', padding: '4px', backgroundColor: '#451a1a', borderRadius: '4px', fontSize: '11px', color: '#fca5a5'}}>
+                      🚨 {cam.l2_vlm_anomaly}
+                    </div>
+                  )}
                 </div>
               </Popup>
             </CircleMarker>
