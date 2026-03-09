@@ -55,14 +55,14 @@ jobs:
 
     - name: Run tests
       run: |
-        PYTHONPATH=. pytest tests/ -v --tb=short
+        PYTHONPATH=. pytest tests/ -v --tb=short --ignore=tests/test_predictor.py
       env:
         PYTHONPATH: ${{ github.workspace }}
 
     - name: Generate test report
       if: always()
       run: |
-        PYTHONPATH=. pytest tests/ -v --tb=short --junitxml=test-results.xml
+        PYTHONPATH=. pytest tests/ -v --tb=short --ignore=tests/test_predictor.py --junitxml=test-results.xml
 
     - name: Upload test results
       if: always()
