@@ -1,0 +1,56 @@
+[project]
+name = "sg-smart-city-analytics"
+version = "0.1.0"
+description = "Real-time urban intelligence platform — 90 Singapore traffic cameras, YOLOv11 detection, BoT-SORT tracking, spatial-temporal prediction"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Suhas Reddy"},
+]
+keywords = ["computer-vision", "yolo", "traffic", "smart-city", "singapore", "deep-learning"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Programming Language :: Python :: 3.11",
+]
+
+[project.urls]
+Homepage = "https://github.com/Suhxs-Reddy/sg-smart-city-analytics"
+Repository = "https://github.com/Suhxs-Reddy/sg-smart-city-analytics"
+
+[project.scripts]
+sg-collect = "src.ingestion.collector:main"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",     # pycodestyle errors
+    "W",     # pycodestyle warnings
+    "F",     # pyflakes
+    "I",     # isort
+    "UP",    # pyupgrade
+    "B",     # bugbear
+    "SIM",   # simplify
+    "RUF",   # ruff-specific
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+    "B008",  # function calls in default args
+    "SIM108", # ternary operator
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks integration tests",
+]

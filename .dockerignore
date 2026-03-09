@@ -1,0 +1,37 @@
+__pycache__
+*.pyc
+*.pyo
+.git
+.github
+.gitignore
+.ruff_cache
+.mypy_cache
+.pytest_cache
+
+# Data (don't bake into image)
+data/
+logs/
+mlruns/
+mlartifacts/
+
+# Models (downloaded at runtime)
+models/
+*.pt
+*.onnx
+
+# Dev files
+venv/
+.venv/
+*.egg-info
+notebooks/
+scripts/
+tests/
+docs/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
