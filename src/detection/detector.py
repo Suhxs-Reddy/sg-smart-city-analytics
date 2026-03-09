@@ -12,10 +12,9 @@ Designed to run on Colab/Kaggle T4 GPU.
 import json
 import logging
 import time
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 from PIL import Image
@@ -36,6 +35,7 @@ TRAFFIC_CLASSES = {
 @dataclass
 class DetectionResult:
     """Result from running detection on a single frame."""
+
     camera_id: str
     timestamp: str
     image_path: str
@@ -54,7 +54,7 @@ class DetectionResult:
     mean_confidence: float = 0.0
     min_confidence: float = 0.0
     max_confidence: float = 0.0
-    low_confidence_count: int = 0   # Detections below threshold
+    low_confidence_count: int = 0  # Detections below threshold
 
     # Image quality indicators
     mean_brightness: float = 0.0
@@ -209,18 +209,20 @@ class TrafficDetector:
                 if class_name is None:
                     continue
 
-                detections.append({
-                    "class_id": cls_id,
-                    "class_name": class_name,
-                    "confidence": round(conf, 4),
-                    "bbox_normalized": [
-                        round(x_center, 6),
-                        round(y_center, 6),
-                        round(w, 6),
-                        round(h, 6),
-                    ],
-                    "bbox_xyxy": [round(float(x), 1) for x in xyxy],
-                })
+                detections.append(
+                    {
+                        "class_id": cls_id,
+                        "class_name": class_name,
+                        "confidence": round(conf, 4),
+                        "bbox_normalized": [
+                            round(x_center, 6),
+                            round(y_center, 6),
+                            round(w, 6),
+                            round(h, 6),
+                        ],
+                        "bbox_xyxy": [round(float(x), 1) for x in xyxy],
+                    }
+                )
 
                 # Count classes
                 class_counts[class_name] = class_counts.get(class_name, 0) + 1
@@ -261,8 +263,8 @@ class TrafficDetector:
         self,
         image_dir: str,
         camera_id: str = "unknown",
-        output_jsonl: Optional[str] = None,
-        max_images: Optional[int] = None,
+        output_jsonl: str | None = None,
+        max_images: int | None = None,
     ) -> list[DetectionResult]:
         """Run detection on all images in a directory.
 
@@ -300,10 +302,7 @@ class TrafficDetector:
             if (i + 1) % 100 == 0:
                 elapsed = time.time() - start_time
                 fps = (i + 1) / elapsed
-                logger.info(
-                    f"Processed {i + 1}/{len(image_files)} images "
-                    f"({fps:.1f} FPS)"
-                )
+                logger.info(f"Processed {i + 1}/{len(image_files)} images ({fps:.1f} FPS)")
 
         total_time = time.time() - start_time
         logger.info(
@@ -345,12 +344,12 @@ def generate_yolo_labels(
 
     # Remap COCO classes to contiguous IDs for the traffic dataset
     class_remap = {
-        2: 0,   # car → 0
-        3: 1,   # motorcycle → 1
-        5: 2,   # bus → 2
-        7: 3,   # truck → 3
-        0: 4,   # person → 4
-        1: 5,   # bicycle → 5
+        2: 0,  # car → 0
+        3: 1,  # motorcycle → 1
+        5: 2,  # bus → 2
+        7: 3,  # truck → 3
+        0: 4,  # person → 4
+        1: 5,  # bicycle → 5
     }
 
     total_labels = 0
@@ -365,8 +364,7 @@ def generate_yolo_labels(
                 if new_cls is not None:
                     bbox = det["bbox_normalized"]
                     lines.append(
-                        f"{new_cls} {bbox[0]:.6f} {bbox[1]:.6f} "
-                        f"{bbox[2]:.6f} {bbox[3]:.6f}"
+                        f"{new_cls} {bbox[0]:.6f} {bbox[1]:.6f} {bbox[2]:.6f} {bbox[3]:.6f}"
                     )
 
         with open(label_path, "w") as f:
@@ -375,6 +373,5 @@ def generate_yolo_labels(
         total_labels += len(lines)
 
     logger.info(
-        f"Generated {total_labels} labels across "
-        f"{len(detection_results)} images in {output_dir}"
+        f"Generated {total_labels} labels across {len(detection_results)} images in {output_dir}"
     )

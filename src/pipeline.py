@@ -17,9 +17,7 @@ Designed for Colab/Azure execution.
 import json
 import logging
 import time
-from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 import click
 
@@ -45,44 +43,45 @@ DEFAULT_DIRS = {
 class PipelineStage:
     """Base class for pipeline stages with standard I/O patterns."""
 
-    def __init__(self, name: str, dirs: dict = None):
+    def __init__(self, name: str, dirs: dict | None = None):
         self.name = name
         self.dirs = dirs or DEFAULT_DIRS
         self.start_time = None
 
     def _log_start(self, **kwargs):
         self.start_time = time.time()
-        logger.info(f"\n{'='*60}")
+        logger.info(f"\n{'=' * 60}")
         logger.info(f"  STAGE: {self.name}")
         for k, v in kwargs.items():
             logger.info(f"  {k}: {v}")
-        logger.info(f"{'='*60}\n")
+        logger.info(f"{'=' * 60}\n")
 
     def _log_end(self, results: dict):
         duration = time.time() - self.start_time
-        logger.info(f"\n{'='*60}")
+        logger.info(f"\n{'=' * 60}")
         logger.info(f"  STAGE COMPLETE: {self.name} ({duration:.1f}s)")
         for k, v in results.items():
             logger.info(f"  {k}: {v}")
-        logger.info(f"{'='*60}\n")
+        logger.info(f"{'=' * 60}\n")
 
 
 # =============================================================================
 # Stage 1: Detection
 # =============================================================================
 
+
 class DetectionStage(PipelineStage):
     """Run YOLOv11 detection on all collected images."""
 
-    def __init__(self, dirs: dict = None):
+    def __init__(self, dirs: dict | None = None):
         super().__init__("Detection", dirs)
 
     def run(
         self,
-        input_dir: str = None,
+        input_dir: str | None = None,
         model_path: str = "models/yolo11s_traffic.pt",
         confidence: float = 0.25,
-        max_images_per_camera: Optional[int] = None,
+        max_images_per_camera: int | None = None,
     ) -> dict:
         """Run detection on collected data.
 
@@ -144,17 +143,18 @@ class DetectionStage(PipelineStage):
 # Stage 2: Tracking
 # =============================================================================
 
+
 class TrackingStage(PipelineStage):
     """Run BoT-SORT tracking on camera sequences."""
 
-    def __init__(self, dirs: dict = None):
+    def __init__(self, dirs: dict | None = None):
         super().__init__("Tracking", dirs)
 
     def run(
         self,
-        input_dir: str = None,
+        input_dir: str | None = None,
         model_path: str = "models/yolo11s_traffic.pt",
-        max_frames: Optional[int] = None,
+        max_frames: int | None = None,
     ) -> dict:
         from src.tracking.tracker import VehicleTracker, estimate_congestion_score
 
@@ -201,15 +201,16 @@ class TrackingStage(PipelineStage):
 # Stage 3: Analytics (Failure + Drift)
 # =============================================================================
 
+
 class AnalyticsStage(PipelineStage):
     """Run failure analysis and drift monitoring."""
 
-    def __init__(self, dirs: dict = None):
+    def __init__(self, dirs: dict | None = None):
         super().__init__("Analytics", dirs)
 
-    def run(self, config: dict = None) -> dict:
-        from src.analytics.failure_analyzer import FailureAnalyzer
+    def run(self, config: dict | None = None) -> dict:
         from src.analytics.drift_monitor import DriftMonitor
+        from src.analytics.failure_analyzer import FailureAnalyzer
 
         det_dir = Path(self.dirs["detections"])
         output_dir = Path(self.dirs["analytics"])
@@ -255,7 +256,9 @@ class AnalyticsStage(PipelineStage):
         summary = {
             "cameras_analyzed": len(all_results),
             "total_frames": len(all_flat),
-            "mean_reliability": fleet_report.get("fleet_summary", {}).get("mean_reliability", "N/A"),
+            "mean_reliability": fleet_report.get("fleet_summary", {}).get(
+                "mean_reliability", "N/A"
+            ),
             "drift_alerts": len(alerts),
         }
         self._log_end(summary)
@@ -266,10 +269,11 @@ class AnalyticsStage(PipelineStage):
 # Stage 4: Auto-Labeling (for Kaggle dataset)
 # =============================================================================
 
+
 class LabelingStage(PipelineStage):
     """Auto-label collected images using fine-tuned YOLO."""
 
-    def __init__(self, dirs: dict = None):
+    def __init__(self, dirs: dict | None = None):
         super().__init__("Auto-Labeling", dirs)
 
     def run(
@@ -277,7 +281,7 @@ class LabelingStage(PipelineStage):
         model_path: str = "models/yolo11s_traffic.pt",
         confidence: float = 0.3,
     ) -> dict:
-        from src.detection.detector import TrafficDetector, generate_yolo_labels
+        from src.detection.detector import generate_yolo_labels
 
         det_dir = Path(self.dirs["detections"])
         label_dir = Path(self.dirs["dataset"]) / "labels"
@@ -292,11 +296,15 @@ class LabelingStage(PipelineStage):
                 for line in f:
                     try:
                         from src.detection.detector import DetectionResult
+
                         data = json.loads(line)
-                        result = DetectionResult(**{
-                            k: v for k, v in data.items()
-                            if k in DetectionResult.__dataclass_fields__
-                        })
+                        result = DetectionResult(
+                            **{
+                                k: v
+                                for k, v in data.items()
+                                if k in DetectionResult.__dataclass_fields__
+                            }
+                        )
                         all_results.append(result)
                     except (json.JSONDecodeError, TypeError):
                         continue
@@ -312,13 +320,14 @@ class LabelingStage(PipelineStage):
 # Stage 5: Dataset Formatting
 # =============================================================================
 
+
 class DatasetStage(PipelineStage):
     """Format collected data into a Kaggle-ready dataset."""
 
-    def __init__(self, dirs: dict = None):
+    def __init__(self, dirs: dict | None = None):
         super().__init__("Dataset Formatting", dirs)
 
-    def run(self, labels_dir: Optional[str] = None) -> dict:
+    def run(self, labels_dir: str | None = None) -> dict:
         from src.ingestion.dataset_formatter import DatasetFormatter
 
         self._log_start(input=self.dirs["raw"])
@@ -339,10 +348,11 @@ class DatasetStage(PipelineStage):
 # Full Pipeline Runner
 # =============================================================================
 
+
 class SmartCityPipeline:
     """Full end-to-end pipeline orchestrator."""
 
-    def __init__(self, config: dict = None, dirs: dict = None):
+    def __init__(self, config: dict | None = None, dirs: dict | None = None):
         self.config = config or {}
         self.dirs = dirs or DEFAULT_DIRS
         self.results = {}
@@ -354,7 +364,7 @@ class SmartCityPipeline:
     def run_full(
         self,
         model_path: str = "models/yolo11s_traffic.pt",
-        max_images_per_camera: Optional[int] = None,
+        max_images_per_camera: int | None = None,
     ) -> dict:
         """Run the complete pipeline: detect → track → analyze → label → format.
 
@@ -398,7 +408,7 @@ class SmartCityPipeline:
 
         logger.info("\n" + "=" * 60)
         logger.info("  PIPELINE COMPLETE")
-        logger.info(f"  Total time: {total_time:.1f}s ({total_time/60:.1f} min)")
+        logger.info(f"  Total time: {total_time:.1f}s ({total_time / 60:.1f} min)")
         logger.info("=" * 60)
 
         # Save combined results
@@ -414,10 +424,14 @@ class SmartCityPipeline:
 # CLI Entry Point
 # =============================================================================
 
+
 @click.command()
-@click.option("--mode", default="full",
-              type=click.Choice(["full", "detect", "track", "analyze", "label", "dataset"]),
-              help="Pipeline mode")
+@click.option(
+    "--mode",
+    default="full",
+    type=click.Choice(["full", "detect", "track", "analyze", "label", "dataset"]),
+    help="Pipeline mode",
+)
 @click.option("--input", "input_dir", default=None, help="Input directory override")
 @click.option("--model", default="models/yolo11s_traffic.pt", help="YOLO model path")
 @click.option("--max-images", default=None, type=int, help="Limit images per camera")
@@ -456,7 +470,9 @@ def main(mode, input_dir, model, max_images, config):
     if mode == "full":
         pipeline.run_full(model_path=model, max_images_per_camera=max_images)
     elif mode == "detect":
-        DetectionStage().run(input_dir=input_dir, model_path=model, max_images_per_camera=max_images)
+        DetectionStage().run(
+            input_dir=input_dir, model_path=model, max_images_per_camera=max_images
+        )
     elif mode == "track":
         TrackingStage().run(input_dir=input_dir, model_path=model)
     elif mode == "analyze":

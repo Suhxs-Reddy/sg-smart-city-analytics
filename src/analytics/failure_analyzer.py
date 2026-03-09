@@ -4,7 +4,7 @@ Singapore Smart City — Detection Failure Analyzer
 6-category failure taxonomy for traffic camera detection:
 1. Low Confidence — detections below confidence floor
 2. Weather Degradation — rain/fog causing low visibility
-3. Low Resolution — cameras at 320×240 causing missed detections
+3. Low Resolution — cameras at 320x240 causing missed detections
 4. Occlusion — overlapping vehicles hiding detections
 5. Night Mode — low brightness causing feature loss
 6. Camera Failure — zero detections when traffic expected
@@ -15,10 +15,8 @@ Generates per-camera reliability scorecards and failure reports.
 import json
 import logging
 from collections import defaultdict
-from dataclasses import dataclass, field, asdict
-from datetime import datetime
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 
@@ -28,6 +26,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # Failure Categories
 # =============================================================================
+
 
 class FailureCategory:
     LOW_CONFIDENCE = "low_confidence"
@@ -41,6 +40,7 @@ class FailureCategory:
 @dataclass
 class FailureReport:
     """Failure analysis for a single detection frame."""
+
     camera_id: str
     timestamp: str
     failure_flags: list = field(default_factory=list)
@@ -54,6 +54,7 @@ class FailureReport:
 @dataclass
 class CameraReliabilityCard:
     """Reliability scorecard for a single camera over a time period."""
+
     camera_id: str
     total_frames: int = 0
     resolution: str = ""
@@ -81,10 +82,11 @@ class CameraReliabilityCard:
 # Failure Analyzer
 # =============================================================================
 
+
 class FailureAnalyzer:
     """Analyzes detection results for failure patterns."""
 
-    def __init__(self, config: dict = None):
+    def __init__(self, config: dict | None = None):
         """
         Args:
             config: Failure threshold configuration. Uses defaults if None.
@@ -99,9 +101,14 @@ class FailureAnalyzer:
 
         # Weather conditions that typically cause degradation
         self.adverse_weather = {
-            "Thundery Showers", "Heavy Thundery Showers",
-            "Showers", "Heavy Showers", "Light Showers",
-            "Heavy Rain", "Moderate Rain", "Light Rain",
+            "Thundery Showers",
+            "Heavy Thundery Showers",
+            "Showers",
+            "Heavy Showers",
+            "Light Showers",
+            "Heavy Rain",
+            "Moderate Rain",
+            "Light Rain",
         }
 
     def _compute_iou(self, box1: list, box2: list) -> float:
@@ -197,8 +204,7 @@ class FailureAnalyzer:
         # Zero detections + not night + not bad weather = likely camera issue
         if num_detections == 0:
             is_expected_empty = (
-                mean_brightness < self.night_brightness or
-                weather in self.adverse_weather
+                mean_brightness < self.night_brightness or weather in self.adverse_weather
             )
             if not is_expected_empty:
                 failures.append(FailureCategory.CAMERA_FAILURE)
@@ -262,7 +268,7 @@ class FailureAnalyzer:
         # Group by time of day (rough buckets)
         time_reliability = defaultdict(list)
 
-        for report, det in zip(reports, detection_results):
+        for report, det in zip(reports, detection_results, strict=False):
             reliability_scores.append(report.reliability_score)
 
             if report.failure_flags:
@@ -314,12 +320,10 @@ class FailureAnalyzer:
             frames_with_failures=frames_with_any_failure,
             failure_rate=round(frames_with_any_failure / total * 100, 1),
             reliability_by_weather={
-                k: round(float(np.mean(v)), 3)
-                for k, v in weather_reliability.items()
+                k: round(float(np.mean(v)), 3) for k, v in weather_reliability.items()
             },
             reliability_by_time_of_day={
-                k: round(float(np.mean(v)), 3)
-                for k, v in time_reliability.items()
+                k: round(float(np.mean(v)), 3) for k, v in time_reliability.items()
             },
             issues=issues,
         )
@@ -327,7 +331,7 @@ class FailureAnalyzer:
     def generate_fleet_report(
         self,
         all_detection_results: dict[str, list[dict]],
-        output_path: Optional[str] = None,
+        output_path: str | None = None,
     ) -> dict:
         """Generate a report across all cameras.
 
@@ -340,9 +344,7 @@ class FailureAnalyzer:
         """
         scorecards = {}
         for camera_id, results in all_detection_results.items():
-            scorecards[camera_id] = self.generate_camera_scorecard(
-                results, camera_id
-            )
+            scorecards[camera_id] = self.generate_camera_scorecard(results, camera_id)
 
         # Fleet summary
         reliabilities = [sc.overall_reliability for sc in scorecards.values()]
@@ -359,7 +361,9 @@ class FailureAnalyzer:
                 "total_cameras": len(scorecards),
                 "mean_reliability": round(float(np.mean(reliabilities)), 3),
                 "median_reliability": round(float(np.median(reliabilities)), 3),
-                "worst_camera_reliability": round(float(min(reliabilities)), 3) if reliabilities else 0,
+                "worst_camera_reliability": round(float(min(reliabilities)), 3)
+                if reliabilities
+                else 0,
                 "mean_failure_rate_pct": round(float(np.mean(failure_rates)), 1),
             },
             "worst_cameras": [
@@ -371,9 +375,7 @@ class FailureAnalyzer:
                 }
                 for sc in worst_cameras
             ],
-            "per_camera_scorecards": {
-                cam_id: sc.to_dict() for cam_id, sc in scorecards.items()
-            },
+            "per_camera_scorecards": {cam_id: sc.to_dict() for cam_id, sc in scorecards.items()},
         }
 
         if output_path:

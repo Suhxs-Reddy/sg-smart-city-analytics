@@ -16,7 +16,7 @@ set -e  # Exit on error
 # ============================================================================
 
 RESOURCE_GROUP="sg-smart-city-rg"
-LOCATION="southeastasia"  # Singapore region
+LOCATION="centralus"  # Central US region
 VM_NAME="sg-smart-city-vm"
 VM_SIZE="Standard_B1s"  # 1 vCPU, 1GB RAM - $8/month
 VM_IMAGE="Ubuntu2204"

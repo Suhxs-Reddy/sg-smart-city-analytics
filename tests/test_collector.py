@@ -9,33 +9,30 @@ Covers:
 - Collection cycle orchestration (with mocked APIs)
 """
 
-import asyncio
 import hashlib
 import json
-from datetime import datetime, timezone, timedelta
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
+from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock
 
 import aiohttp
+import pytest
 
 from src.ingestion.collector import (
-    SingaporeAPIClient,
-    DataCollector,
-    compute_image_hash,
-    extract_weather_condition,
-    extract_temperature,
-    extract_pm25,
-    count_nearby_taxis,
-    load_config,
     SGT,
+    DataCollector,
+    SingaporeAPIClient,
+    compute_image_hash,
+    count_nearby_taxis,
+    extract_pm25,
+    extract_temperature,
+    extract_weather_condition,
+    load_config,
 )
-
 
 # =============================================================================
 # Fixtures
 # =============================================================================
+
 
 @pytest.fixture
 def sample_config():
@@ -45,7 +42,9 @@ def sample_config():
             "traffic_images": {"url": "https://api.data.gov.sg/v1/transport/traffic-images"},
             "taxi_availability": {"url": "https://api.data.gov.sg/v1/transport/taxi-availability"},
             "air_temperature": {"url": "https://api.data.gov.sg/v1/environment/air-temperature"},
-            "weather_forecast": {"url": "https://api.data.gov.sg/v1/environment/24-hour-weather-forecast"},
+            "weather_forecast": {
+                "url": "https://api.data.gov.sg/v1/environment/24-hour-weather-forecast"
+            },
             "pm25": {"url": "https://api.data.gov.sg/v1/environment/pm25"},
         },
         "collection": {
@@ -72,25 +71,27 @@ def sample_config():
 def sample_traffic_response():
     """Minimal traffic API response with 2 cameras."""
     return {
-        "items": [{
-            "timestamp": "2026-03-08T15:00:00+08:00",
-            "cameras": [
-                {
-                    "camera_id": "1001",
-                    "timestamp": "2026-03-08T15:00:05+08:00",
-                    "image": "https://images.data.gov.sg/api/traffic-images/2026/03/cam1001.jpg",
-                    "location": {"latitude": 1.29531, "longitude": 103.871146},
-                    "image_metadata": {"width": 1920, "height": 1080, "md5": "abc123"},
-                },
-                {
-                    "camera_id": "1002",
-                    "timestamp": "2026-03-08T15:00:05+08:00",
-                    "image": "https://images.data.gov.sg/api/traffic-images/2026/03/cam1002.jpg",
-                    "location": {"latitude": 1.31988, "longitude": 103.87653},
-                    "image_metadata": {"width": 320, "height": 240, "md5": "def456"},
-                },
-            ],
-        }],
+        "items": [
+            {
+                "timestamp": "2026-03-08T15:00:00+08:00",
+                "cameras": [
+                    {
+                        "camera_id": "1001",
+                        "timestamp": "2026-03-08T15:00:05+08:00",
+                        "image": "https://images.data.gov.sg/api/traffic-images/2026/03/cam1001.jpg",
+                        "location": {"latitude": 1.29531, "longitude": 103.871146},
+                        "image_metadata": {"width": 1920, "height": 1080, "md5": "abc123"},
+                    },
+                    {
+                        "camera_id": "1002",
+                        "timestamp": "2026-03-08T15:00:05+08:00",
+                        "image": "https://images.data.gov.sg/api/traffic-images/2026/03/cam1002.jpg",
+                        "location": {"latitude": 1.31988, "longitude": 103.87653},
+                        "image_metadata": {"width": 320, "height": 240, "md5": "def456"},
+                    },
+                ],
+            }
+        ],
     }
 
 
@@ -98,12 +99,14 @@ def sample_traffic_response():
 def sample_forecast_response():
     """Weather forecast API response."""
     return {
-        "items": [{
-            "general": {
-                "forecast": "Thundery Showers",
-                "temperature": {"low": 24, "high": 34},
-            },
-        }],
+        "items": [
+            {
+                "general": {
+                    "forecast": "Thundery Showers",
+                    "temperature": {"low": 24, "high": 34},
+                },
+            }
+        ],
     }
 
 
@@ -111,12 +114,14 @@ def sample_forecast_response():
 def sample_temperature_response():
     """Air temperature API response."""
     return {
-        "items": [{
-            "readings": [
-                {"station_id": "S107", "value": 26.4},
-                {"station_id": "S24", "value": 25.7},
-            ],
-        }],
+        "items": [
+            {
+                "readings": [
+                    {"station_id": "S107", "value": 26.4},
+                    {"station_id": "S24", "value": 25.7},
+                ],
+            }
+        ],
     }
 
 
@@ -124,14 +129,19 @@ def sample_temperature_response():
 def sample_pm25_response():
     """PM2.5 API response."""
     return {
-        "items": [{
-            "readings": {
-                "pm25_one_hourly": {
-                    "west": 9, "east": 18, "central": 15,
-                    "south": 7, "north": 15,
+        "items": [
+            {
+                "readings": {
+                    "pm25_one_hourly": {
+                        "west": 9,
+                        "east": 18,
+                        "central": 15,
+                        "south": 7,
+                        "north": 15,
+                    },
                 },
-            },
-        }],
+            }
+        ],
     }
 
 
@@ -139,23 +149,26 @@ def sample_pm25_response():
 def sample_taxi_response():
     """Taxi availability API response with a few positions."""
     return {
-        "features": [{
-            "geometry": {
-                "type": "MultiPoint",
-                "coordinates": [
-                    [103.871, 1.295],   # Near camera 1001
-                    [103.872, 1.296],   # Near camera 1001
-                    [103.7, 1.35],      # Far away (west)
-                    [103.95, 1.32],     # Far away (east)
-                ],
-            },
-        }],
+        "features": [
+            {
+                "geometry": {
+                    "type": "MultiPoint",
+                    "coordinates": [
+                        [103.871, 1.295],  # Near camera 1001
+                        [103.872, 1.296],  # Near camera 1001
+                        [103.7, 1.35],  # Far away (west)
+                        [103.95, 1.32],  # Far away (east)
+                    ],
+                },
+            }
+        ],
     }
 
 
 # =============================================================================
 # Unit Tests — Data Extraction
 # =============================================================================
+
 
 class TestExtractWeatherCondition:
     def test_valid_forecast(self, sample_forecast_response):
@@ -244,6 +257,7 @@ class TestComputeImageHash:
 # Unit Tests — Camera Filtering
 # =============================================================================
 
+
 class TestCameraFiltering:
     def test_no_filter_passes_all(self, sample_config, sample_traffic_response):
         collector = DataCollector(sample_config)
@@ -255,7 +269,7 @@ class TestCameraFiltering:
         collector = DataCollector(sample_config)
         cameras = sample_traffic_response["items"][0]["cameras"]
 
-        assert collector._should_collect_camera(cameras[0]) is True   # 1001
+        assert collector._should_collect_camera(cameras[0]) is True  # 1001
         assert collector._should_collect_camera(cameras[1]) is False  # 1002
 
     def test_filter_by_resolution(self, sample_config, sample_traffic_response):
@@ -263,13 +277,14 @@ class TestCameraFiltering:
         collector = DataCollector(sample_config)
         cameras = sample_traffic_response["items"][0]["cameras"]
 
-        assert collector._should_collect_camera(cameras[0]) is True   # 1920
+        assert collector._should_collect_camera(cameras[0]) is True  # 1920
         assert collector._should_collect_camera(cameras[1]) is False  # 320
 
 
 # =============================================================================
 # Unit Tests — Path Generation
 # =============================================================================
+
 
 class TestPathGeneration:
     def test_image_path_format(self, sample_config):
@@ -295,13 +310,19 @@ class TestPathGeneration:
 # Integration-Style Tests — Collection Cycle (mocked HTTP)
 # =============================================================================
 
+
 class TestCollectionCycle:
     @pytest.mark.xfail(reason="Integration test needs image download mock wiring")
     @pytest.mark.asyncio
     async def test_full_cycle_with_mocked_apis(
-        self, sample_config, sample_traffic_response,
-        sample_forecast_response, sample_temperature_response,
-        sample_pm25_response, sample_taxi_response, tmp_path,
+        self,
+        sample_config,
+        sample_traffic_response,
+        sample_forecast_response,
+        sample_temperature_response,
+        sample_pm25_response,
+        sample_taxi_response,
+        tmp_path,
     ):
         """Test a complete collection cycle with all APIs mocked."""
         sample_config["collection"]["output_dir"] = str(tmp_path / "data")
@@ -379,7 +400,9 @@ class TestCollectionCycle:
 
     @pytest.mark.asyncio
     async def test_cycle_handles_api_failure(
-        self, sample_config, tmp_path,
+        self,
+        sample_config,
+        tmp_path,
     ):
         """Test graceful handling when traffic API is down."""
         sample_config["collection"]["output_dir"] = str(tmp_path / "data")
@@ -407,6 +430,7 @@ class TestCollectionCycle:
 # =============================================================================
 # Config Loading Test
 # =============================================================================
+
 
 class TestConfigLoading:
     def test_load_real_config(self):

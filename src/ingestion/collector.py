@@ -15,11 +15,9 @@ import asyncio
 import hashlib
 import json
 import logging
-import os
 import time
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Optional
 
 import aiohttp
 import click
@@ -35,9 +33,10 @@ logger = logging.getLogger(__name__)
 # Configuration
 # =============================================================================
 
+
 def load_config(config_path: str = "configs/collection_config.yaml") -> dict:
     """Load collection configuration from YAML file."""
-    with open(config_path, "r") as f:
+    with open(config_path) as f:
         return yaml.safe_load(f)
 
 
@@ -45,19 +44,18 @@ def load_config(config_path: str = "configs/collection_config.yaml") -> dict:
 # API Clients
 # =============================================================================
 
+
 class SingaporeAPIClient:
     """Async client for all Singapore data.gov.sg APIs."""
 
     def __init__(self, config: dict, session: aiohttp.ClientSession):
         self.config = config
         self.session = session
-        self.timeout = aiohttp.ClientTimeout(
-            total=config["collection"]["request_timeout_seconds"]
-        )
+        self.timeout = aiohttp.ClientTimeout(total=config["collection"]["request_timeout_seconds"])
         self.max_retries = config["collection"]["max_retries"]
         self.retry_delay = config["collection"]["retry_delay_seconds"]
 
-    async def _fetch_json(self, url: str) -> Optional[dict]:
+    async def _fetch_json(self, url: str) -> dict | None:
         """Fetch JSON from an API endpoint with retry logic."""
         for attempt in range(self.max_retries):
             try:
@@ -69,20 +67,19 @@ class SingaporeAPIClient:
                             f"API returned {resp.status} for {url} "
                             f"(attempt {attempt + 1}/{self.max_retries})"
                         )
-            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+            except (TimeoutError, aiohttp.ClientError) as e:
                 logger.warning(
-                    f"Request failed for {url}: {e} "
-                    f"(attempt {attempt + 1}/{self.max_retries})"
+                    f"Request failed for {url}: {e} (attempt {attempt + 1}/{self.max_retries})"
                 )
 
             if attempt < self.max_retries - 1:
-                delay = self.retry_delay * (2 ** attempt)  # Exponential backoff
+                delay = self.retry_delay * (2**attempt)  # Exponential backoff
                 await asyncio.sleep(delay)
 
         logger.error(f"All {self.max_retries} retries failed for {url}")
         return None
 
-    async def _download_image(self, url: str) -> Optional[bytes]:
+    async def _download_image(self, url: str) -> bytes | None:
         """Download a camera image with retry logic."""
         for attempt in range(self.max_retries):
             try:
@@ -90,39 +87,37 @@ class SingaporeAPIClient:
                     if resp.status == 200:
                         return await resp.read()
                     else:
-                        logger.warning(
-                            f"Image download returned {resp.status} for {url}"
-                        )
-            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                        logger.warning(f"Image download returned {resp.status} for {url}")
+            except (TimeoutError, aiohttp.ClientError) as e:
                 logger.warning(f"Image download failed: {e}")
 
             if attempt < self.max_retries - 1:
-                delay = self.retry_delay * (2 ** attempt)
+                delay = self.retry_delay * (2**attempt)
                 await asyncio.sleep(delay)
 
         return None
 
-    async def fetch_traffic_images(self) -> Optional[dict]:
+    async def fetch_traffic_images(self) -> dict | None:
         """Fetch all traffic camera data."""
         url = self.config["apis"]["traffic_images"]["url"]
         return await self._fetch_json(url)
 
-    async def fetch_taxi_availability(self) -> Optional[dict]:
+    async def fetch_taxi_availability(self) -> dict | None:
         """Fetch taxi GPS positions."""
         url = self.config["apis"]["taxi_availability"]["url"]
         return await self._fetch_json(url)
 
-    async def fetch_weather(self) -> Optional[dict]:
+    async def fetch_weather(self) -> dict | None:
         """Fetch air temperature readings."""
         url = self.config["apis"]["air_temperature"]["url"]
         return await self._fetch_json(url)
 
-    async def fetch_weather_forecast(self) -> Optional[dict]:
+    async def fetch_weather_forecast(self) -> dict | None:
         """Fetch 24-hour weather forecast."""
         url = self.config["apis"]["weather_forecast"]["url"]
         return await self._fetch_json(url)
 
-    async def fetch_pm25(self) -> Optional[dict]:
+    async def fetch_pm25(self) -> dict | None:
         """Fetch PM2.5 air quality readings."""
         url = self.config["apis"]["pm25"]["url"]
         return await self._fetch_json(url)
@@ -132,12 +127,13 @@ class SingaporeAPIClient:
 # Data Processors
 # =============================================================================
 
+
 def compute_image_hash(image_bytes: bytes) -> str:
     """Compute SHA-256 hash of image bytes for deduplication."""
     return hashlib.sha256(image_bytes).hexdigest()
 
 
-def extract_weather_condition(forecast_data: Optional[dict]) -> str:
+def extract_weather_condition(forecast_data: dict | None) -> str:
     """Extract current weather condition from forecast API response."""
     if not forecast_data:
         return "unknown"
@@ -154,7 +150,7 @@ def extract_weather_condition(forecast_data: Optional[dict]) -> str:
     return "unknown"
 
 
-def extract_temperature(weather_data: Optional[dict]) -> Optional[float]:
+def extract_temperature(weather_data: dict | None) -> float | None:
     """Extract mean temperature from weather station readings."""
     if not weather_data:
         return None
@@ -172,7 +168,7 @@ def extract_temperature(weather_data: Optional[dict]) -> Optional[float]:
     return None
 
 
-def extract_pm25(pm25_data: Optional[dict]) -> Optional[dict]:
+def extract_pm25(pm25_data: dict | None) -> dict | None:
     """Extract PM2.5 readings per region."""
     if not pm25_data:
         return None
@@ -188,7 +184,7 @@ def extract_pm25(pm25_data: Optional[dict]) -> Optional[dict]:
 
 
 def count_nearby_taxis(
-    taxi_data: Optional[dict],
+    taxi_data: dict | None,
     camera_lat: float,
     camera_lng: float,
     radius_km: float = 5.0,
@@ -212,8 +208,7 @@ def count_nearby_taxis(
         radius_deg = radius_km / 111.0
 
         for lng, lat in coordinates:
-            if (abs(lat - camera_lat) < radius_deg and
-                    abs(lng - camera_lng) < radius_deg):
+            if abs(lat - camera_lat) < radius_deg and abs(lng - camera_lng) < radius_deg:
                 count += 1
 
         return count
@@ -224,6 +219,7 @@ def count_nearby_taxis(
 # =============================================================================
 # Collector
 # =============================================================================
+
 
 class DataCollector:
     """Main data collection orchestrator."""
@@ -253,10 +249,7 @@ class DataCollector:
 
         # Filter by minimum resolution
         min_width = self.camera_filter.get("min_resolution_width")
-        if min_width and camera.get("image_metadata", {}).get("width", 0) < min_width:
-            return False
-
-        return True
+        return not (min_width and camera.get("image_metadata", {}).get("width", 0) < min_width)
 
     def _get_image_path(self, camera_id: str, timestamp: datetime) -> Path:
         """Get the filesystem path for saving a camera image."""
@@ -274,9 +267,9 @@ class DataCollector:
         camera: dict,
         client: SingaporeAPIClient,
         weather_condition: str,
-        temperature: Optional[float],
-        pm25_readings: Optional[dict],
-        taxi_data: Optional[dict],
+        temperature: float | None,
+        pm25_readings: dict | None,
+        taxi_data: dict | None,
         collection_time: datetime,
     ) -> bool:
         """Download image and save metadata for a single camera."""
@@ -347,9 +340,7 @@ class DataCollector:
         cycle_start = time.time()
         collection_time = datetime.now(SGT)
 
-        logger.info(
-            f"Starting collection cycle at {collection_time.strftime('%H:%M:%S')}"
-        )
+        logger.info(f"Starting collection cycle at {collection_time.strftime('%H:%M:%S')}")
 
         # Fetch all data sources in parallel
         traffic_task = client.fetch_traffic_images()
@@ -358,10 +349,8 @@ class DataCollector:
         pm25_task = client.fetch_pm25()
         taxi_task = client.fetch_taxi_availability()
 
-        traffic_data, weather_data, forecast_data, pm25_data, taxi_data = (
-            await asyncio.gather(
-                traffic_task, weather_task, forecast_task, pm25_task, taxi_task
-            )
+        traffic_data, weather_data, forecast_data, pm25_data, taxi_data = await asyncio.gather(
+            traffic_task, weather_task, forecast_task, pm25_task, taxi_task
         )
 
         if not traffic_data:
@@ -392,8 +381,13 @@ class DataCollector:
         async def bounded_collect(camera: dict) -> bool:
             async with semaphore:
                 return await self._collect_single_camera(
-                    camera, client, weather_condition, temperature,
-                    pm25_readings, taxi_data, collection_time,
+                    camera,
+                    client,
+                    weather_condition,
+                    temperature,
+                    pm25_readings,
+                    taxi_data,
+                    collection_time,
                 )
 
         results = await asyncio.gather(
@@ -443,13 +437,15 @@ class DataCollector:
         print(f"  Cycles completed:    {self.stats['cycles_completed']}")
         print(f"  Total images saved:  {self.stats['images_saved']}")
         print(f"  Total images failed: {self.stats['images_failed']}")
-        print(f"  Last cycle cameras:  {self.stats['cameras_responding']} ok / "
-              f"{self.stats['cameras_failed']} failed")
+        print(
+            f"  Last cycle cameras:  {self.stats['cameras_responding']} ok / "
+            f"{self.stats['cameras_failed']} failed"
+        )
 
-        if self.stats['images_saved'] + self.stats['images_failed'] > 0:
+        if self.stats["images_saved"] + self.stats["images_failed"] > 0:
             success_rate = (
-                self.stats['images_saved'] /
-                (self.stats['images_saved'] + self.stats['images_failed'])
+                self.stats["images_saved"]
+                / (self.stats["images_saved"] + self.stats["images_failed"])
                 * 100
             )
             print(f"  Overall success rate: {success_rate:.1f}%")
@@ -460,6 +456,7 @@ class DataCollector:
 # =============================================================================
 # Main Entry Point
 # =============================================================================
+
 
 async def run_collector(
     config: dict,
@@ -480,21 +477,14 @@ async def run_collector(
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
         handlers=[
             logging.StreamHandler(),
-            *(
-                [logging.FileHandler(log_file)]
-                if log_file
-                else []
-            ),
+            *([logging.FileHandler(log_file)] if log_file else []),
         ],
     )
 
     if log_file:
         Path(log_file).parent.mkdir(parents=True, exist_ok=True)
 
-    logger.info(
-        f"Starting collector — duration: {duration_hours}h, "
-        f"interval: {interval_seconds}s"
-    )
+    logger.info(f"Starting collector — duration: {duration_hours}h, interval: {interval_seconds}s")
 
     async with aiohttp.ClientSession() as session:
         client = SingaporeAPIClient(config, session)
@@ -545,7 +535,7 @@ async def run_collector(
     type=int,
     help="Override collection interval in seconds (default: from config)",
 )
-def main(config: str, duration: float, interval: Optional[int]):
+def main(config: str, duration: float, interval: int | None):
     """Singapore Smart City — Data Collector
 
     Collects traffic camera images and multi-modal metadata from
@@ -564,7 +554,7 @@ def main(config: str, duration: float, interval: Optional[int]):
     cfg = load_config(config)
     interval_seconds = interval or cfg["collection"]["interval_seconds"]
 
-    print(f"\n🇸🇬 Singapore Smart City — Data Collector")
+    print("\n🇸🇬 Singapore Smart City — Data Collector")
     print(f"   Duration: {duration} hours")
     print(f"   Interval: {interval_seconds} seconds")
     print(f"   Output:   {cfg['collection']['output_dir']}/\n")

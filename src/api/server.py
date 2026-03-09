@@ -15,11 +15,9 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
 
@@ -43,19 +41,20 @@ app.add_middleware(
 # Data Store (in-memory for MVP, swap to Redis/DB for production)
 # =============================================================================
 
+
 class AnalyticsStore:
     """In-memory store for latest analytics results."""
 
     def __init__(self):
-        self.camera_metadata: dict = {}           # camera_id → location, resolution
-        self.latest_detections: dict = {}         # camera_id → DetectionResult
-        self.latest_tracking: dict = {}           # camera_id → TrackingResult
-        self.congestion_scores: dict = {}         # camera_id → congestion dict
-        self.failure_reports: dict = {}           # camera_id → FailureReport
-        self.drift_alerts: list = []              # Recent drift alerts
-        self.fleet_report: dict = {}              # Latest fleet report
-        self.predictions: dict = {}               # camera_id → predicted counts
-        self.last_updated: Optional[str] = None
+        self.camera_metadata: dict = {}  # camera_id → location, resolution
+        self.latest_detections: dict = {}  # camera_id → DetectionResult
+        self.latest_tracking: dict = {}  # camera_id → TrackingResult
+        self.congestion_scores: dict = {}  # camera_id → congestion dict
+        self.failure_reports: dict = {}  # camera_id → FailureReport
+        self.drift_alerts: list = []  # Recent drift alerts
+        self.fleet_report: dict = {}  # Latest fleet report
+        self.predictions: dict = {}  # camera_id → predicted counts
+        self.last_updated: str | None = None
 
     def update_detection(self, camera_id: str, result: dict):
         self.latest_detections[camera_id] = result
@@ -73,17 +72,19 @@ class AnalyticsStore:
             congestion = self.congestion_scores.get(cam_id, {})
             failure = self.failure_reports.get(cam_id, {})
 
-            summaries.append({
-                "camera_id": cam_id,
-                "latitude": meta.get("latitude", 0),
-                "longitude": meta.get("longitude", 0),
-                "resolution": f"{meta.get('width', '?')}x{meta.get('height', '?')}",
-                "num_vehicles": detection.get("num_vehicles", 0),
-                "congestion_level": congestion.get("level", "unknown"),
-                "congestion_score": congestion.get("score", 0),
-                "reliability_score": failure.get("reliability_score", 1.0),
-                "failure_flags": failure.get("failure_flags", []),
-            })
+            summaries.append(
+                {
+                    "camera_id": cam_id,
+                    "latitude": meta.get("latitude", 0),
+                    "longitude": meta.get("longitude", 0),
+                    "resolution": f"{meta.get('width', '?')}x{meta.get('height', '?')}",
+                    "num_vehicles": detection.get("num_vehicles", 0),
+                    "congestion_level": congestion.get("level", "unknown"),
+                    "congestion_score": congestion.get("score", 0),
+                    "reliability_score": failure.get("reliability_score", 1.0),
+                    "failure_flags": failure.get("failure_flags", []),
+                }
+            )
 
         return summaries
 
@@ -95,6 +96,7 @@ store = AnalyticsStore()
 # =============================================================================
 # API Endpoints
 # =============================================================================
+
 
 @app.get("/")
 async def root():
@@ -206,9 +208,7 @@ async def get_system_stats():
         for flag in report.get("failure_flags", []):
             failure_types[flag] = failure_types.get(flag, 0) + 1
 
-    total_vehicles = sum(
-        d.get("num_vehicles", 0) for d in store.latest_detections.values()
-    )
+    total_vehicles = sum(d.get("num_vehicles", 0) for d in store.latest_detections.values())
 
     return {
         "cameras_total": len(store.camera_metadata),
@@ -224,6 +224,7 @@ async def get_system_stats():
 # =============================================================================
 # Data Loading (called on startup or refresh)
 # =============================================================================
+
 
 @app.post("/api/refresh")
 async def refresh_data(data_dir: str = "data/processed"):
@@ -287,4 +288,4 @@ async def refresh_data(data_dir: str = "data/processed"):
 
     except Exception as e:
         logger.exception(f"Failed to refresh data: {e}")
-        raise HTTPException(500, f"Refresh failed: {e}")
+        raise HTTPException(500, f"Refresh failed: {e}") from e

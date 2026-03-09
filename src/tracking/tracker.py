@@ -13,9 +13,8 @@ Designed to run on Colab/Kaggle T4 GPU.
 import json
 import logging
 import time
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 
@@ -25,11 +24,12 @@ logger = logging.getLogger(__name__)
 @dataclass
 class TrackedVehicle:
     """Represents a single tracked vehicle across frames."""
+
     track_id: int
     class_name: str
-    first_seen: str           # Timestamp of first appearance
-    last_seen: str            # Timestamp of last appearance
-    num_frames: int = 0       # Total frames this track appears in
+    first_seen: str  # Timestamp of first appearance
+    last_seen: str  # Timestamp of last appearance
+    num_frames: int = 0  # Total frames this track appears in
     bbox_history: list = field(default_factory=list)  # List of (timestamp, [x1,y1,x2,y2])
     confidence_history: list = field(default_factory=list)
 
@@ -55,6 +55,7 @@ class TrackedVehicle:
 @dataclass
 class TrackingResult:
     """Result from tracking across a sequence of frames."""
+
     camera_id: str
     start_time: str
     end_time: str
@@ -114,10 +115,14 @@ class VehicleTracker:
 
         # Traffic-relevant COCO class IDs
         self.traffic_class_ids = {2, 3, 5, 7, 0, 1}  # car, moto, bus, truck, person, bicycle
-        self.vehicle_class_ids = {2, 3, 5, 7}         # car, moto, bus, truck
+        self.vehicle_class_ids = {2, 3, 5, 7}  # car, moto, bus, truck
         self.class_names = {
-            2: "car", 3: "motorcycle", 5: "bus",
-            7: "truck", 0: "person", 1: "bicycle",
+            2: "car",
+            3: "motorcycle",
+            5: "bus",
+            7: "truck",
+            0: "person",
+            1: "bicycle",
         }
 
     def _initialize(self):
@@ -130,16 +135,14 @@ class VehicleTracker:
         logger.info(f"Loading detector: {self.detector_model}")
         self._model = YOLO(self.detector_model)
 
-        logger.info(
-            f"Tracker ready: {self.tracker_type} + {self.reid_model}"
-        )
+        logger.info(f"Tracker ready: {self.tracker_type} + {self.reid_model}")
 
     def track_image_sequence(
         self,
         image_dir: str,
         camera_id: str = "unknown",
-        output_path: Optional[str] = None,
-        max_frames: Optional[int] = None,
+        output_path: str | None = None,
+        max_frames: int | None = None,
     ) -> TrackingResult:
         """Run tracking on a directory of sequential images.
 
@@ -173,9 +176,7 @@ class VehicleTracker:
                 total_unique_persons=0,
             )
 
-        logger.info(
-            f"Tracking {len(image_files)} frames from camera {camera_id}"
-        )
+        logger.info(f"Tracking {len(image_files)} frames from camera {camera_id}")
 
         # Track all vehicles across frames
         all_tracks = {}  # track_id → TrackedVehicle
@@ -200,7 +201,9 @@ class VehicleTracker:
             if max_frames and frame_idx >= max_frames:
                 break
 
-            timestamp = image_files[frame_idx].stem if frame_idx < len(image_files) else str(frame_idx)
+            timestamp = (
+                image_files[frame_idx].stem if frame_idx < len(image_files) else str(frame_idx)
+            )
             frame_vehicle_count = 0
 
             if result.boxes is not None and result.boxes.id is not None:
@@ -226,11 +229,13 @@ class VehicleTracker:
                     track = all_tracks[track_id]
                     track.last_seen = timestamp
                     track.num_frames += 1
-                    track.bbox_history.append({
-                        "frame": frame_idx,
-                        "timestamp": timestamp,
-                        "bbox": [round(x, 1) for x in xyxy],
-                    })
+                    track.bbox_history.append(
+                        {
+                            "frame": frame_idx,
+                            "timestamp": timestamp,
+                            "bbox": [round(x, 1) for x in xyxy],
+                        }
+                    )
                     track.confidence_history.append(round(conf, 4))
 
                     if cls_id in self.vehicle_class_ids:
@@ -261,9 +266,9 @@ class VehicleTracker:
             total_unique_vehicles=len(vehicle_tracks),
             total_unique_persons=person_count,
             class_counts=class_counts,
-            avg_vehicles_per_frame=round(
-                np.mean(vehicles_per_frame), 1
-            ) if vehicles_per_frame else 0.0,
+            avg_vehicles_per_frame=round(np.mean(vehicles_per_frame), 1)
+            if vehicles_per_frame
+            else 0.0,
             max_vehicles_in_frame=max(vehicles_per_frame) if vehicles_per_frame else 0,
             vehicles=vehicle_tracks,
             total_processing_time_s=round(total_time, 1),
@@ -305,9 +310,7 @@ def estimate_congestion_score(
         return {"score": 0.0, "level": "unknown", "reason": "no data"}
 
     # Factor 1: Vehicle density (0-1)
-    density_score = min(
-        tracking_result.avg_vehicles_per_frame / high_vehicle_threshold, 1.0
-    )
+    density_score = min(tracking_result.avg_vehicles_per_frame / high_vehicle_threshold, 1.0)
 
     # Factor 2: Average dwell time (0-1)
     # Higher dwell = slower traffic = more congested

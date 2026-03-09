@@ -9,13 +9,10 @@ Statistical drift detection using:
 No ML models — pure statistics for trustworthiness and explainability.
 """
 
-import json
 import logging
 from collections import deque
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
-from pathlib import Path
-from typing import Optional
 
 import numpy as np
 from scipy import stats as scipy_stats
@@ -26,6 +23,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # Drift Detection Methods
 # =============================================================================
+
 
 def compute_psi(
     baseline: np.ndarray,
@@ -67,9 +65,7 @@ def compute_psi(
     current_prop = (current_hist + 1e-6) / (len(current) + n_bins * 1e-6)
 
     # PSI formula
-    psi = np.sum(
-        (current_prop - baseline_prop) * np.log(current_prop / baseline_prop)
-    )
+    psi = np.sum((current_prop - baseline_prop) * np.log(current_prop / baseline_prop))
 
     return round(float(psi), 6)
 
@@ -103,15 +99,17 @@ def compute_ks_test(
 # Drift Monitor
 # =============================================================================
 
+
 @dataclass
 class DriftAlert:
     """A single drift detection alert."""
+
     timestamp: str
-    drift_type: str           # "data", "prediction", "concept"
-    metric_name: str          # What was measured
-    severity: str             # "low", "moderate", "high"
-    value: float              # The metric value
-    threshold: float          # The threshold that was exceeded
+    drift_type: str  # "data", "prediction", "concept"
+    metric_name: str  # What was measured
+    severity: str  # "low", "moderate", "high"
+    value: float  # The metric value
+    threshold: float  # The threshold that was exceeded
     details: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
@@ -121,7 +119,7 @@ class DriftAlert:
 class DriftMonitor:
     """Monitors model and data drift over time using statistical methods."""
 
-    def __init__(self, config: dict = None):
+    def __init__(self, config: dict | None = None):
         """
         Args:
             config: Drift detection configuration. Uses defaults if None.
@@ -173,9 +171,7 @@ class DriftMonitor:
         # Compute baseline correlation (brightness vs confidence)
         if len(brightness) > 10 and len(confidence) > 10:
             min_len = min(len(brightness), len(confidence))
-            corr, _ = scipy_stats.pearsonr(
-                brightness[:min_len], confidence[:min_len]
-            )
+            corr, _ = scipy_stats.pearsonr(brightness[:min_len], confidence[:min_len])
             self.baseline_correlation = corr
         else:
             self.baseline_correlation = 0.0
@@ -209,10 +205,9 @@ class DriftMonitor:
 
         # Extract current distributions
         brightness = np.array([r.get("mean_brightness", 128) for r in detection_results])
-        confidence = np.array([
-            r["mean_confidence"] for r in detection_results
-            if r.get("mean_confidence", 0) > 0
-        ])
+        confidence = np.array(
+            [r["mean_confidence"] for r in detection_results if r.get("mean_confidence", 0) > 0]
+        )
         vehicle_counts = np.array([r.get("num_vehicles", 0) for r in detection_results])
 
         # Update rolling windows
@@ -262,9 +257,7 @@ class DriftMonitor:
         # --- 3. Concept Drift (correlation shift) ---
         if len(brightness) > 10 and len(confidence) > 10:
             min_len = min(len(brightness), len(confidence))
-            current_corr, _ = scipy_stats.pearsonr(
-                brightness[:min_len], confidence[:min_len]
-            )
+            current_corr, _ = scipy_stats.pearsonr(brightness[:min_len], confidence[:min_len])
 
             if self.baseline_correlation is not None:
                 corr_shift = abs(current_corr - self.baseline_correlation)
