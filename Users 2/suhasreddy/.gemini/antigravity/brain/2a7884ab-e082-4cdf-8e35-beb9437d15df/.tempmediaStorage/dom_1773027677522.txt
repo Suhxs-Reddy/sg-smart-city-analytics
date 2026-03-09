@@ -1,0 +1,23 @@
+to which Google Drive for desktop has some access.
+Make sure that you trust Google Drive for desktop
+Review Google Drive for desktop's
+[0] (619,320)<a href='https://policies.google.com/privacy'>privacy policy />
+and
+[1] (845,320)<a href='https://support.google.com/drive/answer/2450387'>Terms of Service />
+to understand how Google Drive for desktop will process and protect your data.
+To make changes at any time, go to your
+[2] (684,545)<a href='https://myaccount.google.com/connections'>Google Account />
+.
+Learn how Google helps you
+[3] (725,629)<a href='https://support.google.com/accounts/answer/14012355'>share data safely />
+.
+[4] (640,824)<button class='VfPpkd-LgbsSe VfPpkd-LgbsSe-OWXEXe-INsAgc VfPpkd-LgbsSe-OWXEXe-dgl2Hf Rj2Mlf OLiIxf PDpWxe P62QJc LQeN7 BqKGqe pIzcPc TrZEUc lw1w4b'>Cancel />
+	Cancel
+[5] (860,824)<button class='VfPpkd-LgbsSe VfPpkd-LgbsSe-OWXEXe-INsAgc VfPpkd-LgbsSe-OWXEXe-dgl2Hf Rj2Mlf OLiIxf PDpWxe P62QJc LQeN7 BqKGqe pIzcPc TrZEUc lw1w4b'>Continue />
+	Continue
+[6] (180,976)<div class='VfPpkd-TkwUic' role='combobox' />
+	‪English (United Kingdom)‬
+	[7] (180,976)<div  />
+[8] (710,976)<a class='lttXSd TrZEUc' href='https://support.google.com/accounts?hl=en-GB&p=account_iph'>Help />
+[9] (818,976)<a class='lttXSd TrZEUc' href='https://accounts.google.com/TOS?loc=US&hl=en-GB&privacy=true'>Privacy />
+[10] (932,976)<a class='lttXSd TrZEUc' href='https://accounts.google.com/TOS?loc=US&hl=en-GB'>Terms />

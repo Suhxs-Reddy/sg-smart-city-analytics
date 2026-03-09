@@ -1,0 +1,323 @@
+<current_dom_explanation>
+This is a temporary snapshot of the current page's DOM structure. The DOM will change if you navigate to or interact with another page. Use a tool like browser_get_dom to capture and preserve the DOM in your trajectory if needed for later reference.
+</current_dom_explanation>
+<current_dom>
+Skip to main content
+[0] (31,74)<a aria-label='View in Google Drive' href='https://drive.google.com/drive/search?q=owner%3Ame%20(type%3Aapplication%2Fvnd.google.colaboratory%20%7C%7C%20type%3Aapplication%2Fvnd.google.colab)&authuser=0' />
+	[1] (31,40)<md-icon  />
+[2] (137,29)<input aria-label='Notebook name' class='doc-name' id='doc-name' />
+[3] (208,29)<button aria-label='Star' class='icon-button  standard ' id='button' />
+	[4] (208,29)<span  />
+star
+[5] (252,29)<md-text-button >Saving... />
+	[6] (252,29)<button class='button' id='button' />
+		[7] (252,29)<span  />
+	[8] (231,29)<md-icon >sync />
+[9] (71,66)<div class='goog-menu-button goog-inline-block' id='file-menu-button' role='button' />
+	[10] (71,66)<div  />
+		[11] (71,66)<div  />
+			[12] (71,66)<div >File />
+[13] (105,66)<div class='goog-menu-button goog-inline-block' id='edit-menu-button' role='button' />
+	[14] (105,66)<div  />
+		[15] (105,66)<div  />
+			[16] (105,66)<div >Edit />
+[17] (142,66)<div class='goog-menu-button goog-inline-block' id='view-menu-button' role='button' />
+	[18] (142,66)<div  />
+		[19] (142,66)<div  />
+			[20] (142,66)<div >View />
+[21] (184,66)<div class='goog-menu-button goog-inline-block' id='insert-menu-button' role='button' />
+	[22] (184,66)<div  />
+		[23] (184,66)<div  />
+			[24] (184,66)<div >Insert />
+[25] (236,66)<div class='goog-menu-button goog-inline-block' id='runtime-menu-button' role='button' />
+	[26] (236,66)<div  />
+		[27] (236,66)<div  />
+			[28] (236,66)<div >Runtime />
+[29] (286,66)<div class='goog-menu-button goog-inline-block' id='tools-menu-button' role='button' />
+	[30] (286,66)<div  />
+		[31] (286,66)<div  />
+			[32] (286,66)<div >Tools />
+[33] (326,66)<div class='goog-menu-button goog-inline-block' id='help-menu-button' role='button' />
+	[34] (326,66)<div  />
+		[35] (326,66)<div  />
+			[36] (326,66)<div >Help />
+[37] (778,42)<button aria-label='Open comments pane' class='icon-button  standard ' id='button' />
+	[38] (778,42)<span  />
+comment
+[39] (822,42)<button aria-label='Open settings' class='icon-button  standard ' id='button' />
+	[40] (822,42)<span  />
+settings
+[41] (892,42)<md-filled-tonal-button >Share />
+	[42] (891,42)<button aria-label='Share notebook' class='button' id='button' />
+		[43] (892,42)<span  />
+	[44] (872,42)<md-icon >people />
+[45] (967,42)<a aria-label='Google Account: Howle  
+(howle1457@gmail.com)' class='gb_B gb_0a gb_1' href='https://accounts.google.com/SignOutOptions?hl=en&continue=https://colab.research.google.com/%3Fpli%3D1&ec=GBRAqQM' role='button' />
+[46] (63,111)<md-text-button >Show command palette
+⌘/Ctrl+Shift+P />
+	[47] (61,111)<button class='button' id='button' />
+		[48] (63,111)<span  />
+	[49] (28,111)<md-icon >search />
+	Show command palette
+	⌘/Ctrl+Shift+P
+Commands
+[50] (141,111)<md-text-button >Insert code cell below
+⌘/Ctrl+M B />
+	[51] (140,111)<button class='button' id='button' />
+		[52] (141,111)<span  />
+	[53] (124,111)<md-icon >add />
+	Insert code cell below
+	⌘/Ctrl+M B
+Code
+[54] (181,111)<md-icon >arrow_drop_down />
+[55] (221,111)<md-text-button >Add text cell />
+	[56] (219,111)<button class='button' id='button' />
+		[57] (221,111)<span  />
+	[58] (206,111)<md-icon >add />
+	Add text cell
+Text
+[59] (288,111)<md-text-button >Run all cells in notebook />
+	[60] (287,111)<button class='button' id='button' />
+		[61] (288,111)<span  />
+	[62] (267,111)<md-icon >play_arrow />
+	Run all cells in notebook
+Run all
+[63] (332,111)<md-icon >arrow_drop_down />
+[64] (870,111)<button aria-label='Focus the last run cell' class='icon-button  standard ' id='button' />
+	[65] (870,111)<span  />
+done
+[66] (909,111)<md-text-button >Connected to
+Python 3 Google Compute Engine backend
+RAM: 1.09 GB/12.67 GB
+Disk: 21.30 GB/107.72 GB />
+	[67] (909,111)<button class='button' id='button' />
+		[68] (909,111)<span  />
+	Connected to
+Python 3 Google Compute Engine backend
+RAM: 1.09 GB/12.67 GB
+Disk: 21.30 GB/107.72 GB
+RAM
+Disk
+[69] (947,111)<md-icon >arrow_drop_down />
+[70] (972,111)<md-icon >expand_less />
+[71] (30,186)<button aria-label='Table of contents' class='icon-button  standard ' id='button' />
+	[72] (30,186)<span  />
+format_list_bulleted
+[73] (30,244)<button aria-label='Find and replace' class='icon-button  standard ' id='button' />
+	[74] (30,244)<span  />
+find_in_page
+[75] (30,302)<button aria-label='Code snippets' class='icon-button  standard ' id='button' />
+	[76] (30,302)<span  />
+code
+[77] (30,361)<button aria-label='Data inspector' class='icon-button  standard ' id='button' />
+	[78] (30,361)<span  />
+eye_tracking
+[79] (30,419)<button aria-label='Secrets' class='icon-button  standard ' id='button' />
+	[80] (30,419)<span  />
+vpn_key
+[81] (30,477)<button aria-label='Files' class='icon-button  standard ' id='button' />
+	[82] (30,477)<span  />
+folder
+[83] (30,536)<button aria-label='Data explorer' class='icon-button  standard ' id='button' />
+	[84] (30,536)<span  />
+table
+[85] (348,545)<colab-scroller aria-label='Notebook' class='notebook-container' id='notebook-main' role='main' scrollable='true' />
+	keyboard_arrow_down
+	Next steps:
+	[86] (219,221)<md-outlined-button >Explain error />
+		[87] (219,221)<button class='button' id='button' />
+			[88] (219,221)<span  />
+	[89] (110,291)<button aria-label='Run cell' id='run-button' />
+		[90] (110,292)<span  />
+	[3]
+	check
+	4s
+	[91] (590,336)<div class='view-lines monaco-mouse-cursor-text' role='presentation' />
+		[92] (590,292)<div  />
+			[93] (255,291)<span  />
+				[94] (255,291)<span ># Clone repo & install dependencies />
+		[95] (590,317)<div  />
+			[96] (135,317)<span >! />
+			[97] (174,317)<span >git clone />
+			[98] (385,317)<span >https://github.com/Suhxs-Reddy/sg-smart-city-analy />
+			[99] (588,317)<span >tics.git />
+			2
+			>/dev/null ||
+			(
+			cd sg-smart-city-analytics && git pull
+		[100] (590,342)<div  />
+			[101] (342,342)<span  />
+				[102] (135,342)<span >! />
+				[103] (314,342)<span >pip install -q aiohttp Pillow imagehash pyyaml cli />
+				[104] (521,342)<span >ck pandas />
+		[105] (590,367)<div  />
+	[106] (75,416)<md-icon >keyboard_arrow_down />
+	[107] (110,416)<md-icon  />
+	[108] (373,435)<colab-static-output-renderer role='group' scrollable='true' />
+		/bin/bash: line 1: cd: sg-smart-city-analytics: No such file or directory
+		━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+		296.7/296.7 kB
+		5.9 MB/s
+		eta
+		0:00:00
+	[109] (110,516)<button aria-label='Run cell' id='run-button' />
+		[110] (110,518)<span  />
+	[1]
+	check
+	0s
+	[111] (373,523)<div class='view-lines monaco-mouse-cursor-text' role='presentation' />
+		[112] (373,517)<div  />
+	Start coding or
+	[113] (272,517)<span class='link' role='button'>generate />
+	with AI.
+	[114] (110,584)<button aria-label='Run cell' id='run-button' />
+		[115] (110,585)<span  />
+	[ ]
+	[116] (457,705)<div class='view-lines monaco-mouse-cursor-text' role='presentation' />
+		[117] (457,585)<div  />
+			[118] (191,584)<span  />
+				[119] (191,584)<span ># Quick API check />
+		[120] (457,610)<div  />
+			[121] (184,609)<span  />
+				[122] (153,609)<span >import />
+				[123] (205,609)<span >requests />
+		[124] (457,635)<div  />
+			[125] (160,635)<span  />
+				[126] (156,635)<span >apis = />
+				[127] (184,635)<span >{ />
+		[128] (457,660)<div  />
+			[129] (381,660)<span >es'
+, />
+				[130] (153,660)<span  />
+				[131] (205,660)<span >'Traffic' />
+				[132] (244,660)<span >: />
+				[133] (427,660)<span >'https://api.data.gov.sg/v1/transport/traffic-imag />
+				es'
+				,
+		[134] (457,685)<div  />
+			[135] (437,685)<span >ather-forecast'
+, />
+				[136] (167,685)<span  />
+				[137] (234,685)<span >'Weather' />
+				[138] (272,685)<span >: />
+				[139] (455,685)<span >'https://api.data.gov.sg/v1/environment/24-hour-we />
+				ather-forecast'
+				,
+		[140] (457,711)<div  />
+			[141] (395,710)<span >ature'
+, />
+				[142] (167,710)<span  />
+				[143] (223,710)<span >'Temp' />
+				[144] (251,710)<span >: />
+				[145] (434,710)<span >'https://api.data.gov.sg/v1/environment/air-temper />
+				ature'
+				,
+		[146] (457,736)<div  />
+			[147] (135,735)<span  />
+				[148] (135,735)<span >} />
+		[149] (457,761)<div  />
+			[150] (237,761)<span  />
+				[151] (142,761)<span >for />
+				[152] (191,761)<span >name, url />
+				[153] (237,761)<span >in />
+				[154] (283,761)<span >apis.items />
+				[155] (325,761)<span >( />
+				[156] (332,761)<span >) />
+				[157] (339,761)<span >: />
+		[158] (457,786)<div  />
+			[159] (269,786)<span  />
+				[160] (209,786)<span >r = requests.get />
+				[161] (290,786)<span >( />
+				[162] (339,786)<span >url, timeout= />
+				[163] (392,786)<span >10 />
+				[164] (402,786)<span >) />
+		[165] (457,811)<div  />
+			[166] (216,811)<span  />
+				[167] (167,811)<span  />
+				[168] (219,811)<span >print />
+				[169] (241,811)<span >( />
+				[170] (248,811)<span >f />
+				[171] (255,811)<span >" />
+				[172] (262,811)<span >{ />
+				[173] (269,811)<span >' />
+				[174] (276,811)<span >' />
+				[175] (283,811)<span >} />
+				[176] (290,811)<span >" />
+				[177] (297,811)<span >) />
+	[178] (487,848)<md-icon >arrow_upward />
+	arrow_downward
+	[179] (541,848)<md-icon >pen_spark />
+	[180] (567,848)<md-icon >delete />
+	[181] (594,848)<md-icon >more_vert />
+	[182] (110,878)<button aria-label='Run cell' id='run-button' />
+		[183] (110,880)<span  />
+	[ ]
+	[184] (373,886)<div class='view-lines monaco-mouse-cursor-text' role='presentation' />
+		[185] (373,879)<div  />
+	Start coding or
+	[186] (272,879)<span class='link' role='button'>generate />
+	with AI.
+	[187] (133,879)<div  />
+[188] (647,545)<div  />
+[189] (712,188)<md-primary-tab class='selected-tab' />
+	[190] (712,188)<div  />
+		[191] (712,188)<div  />
+			[192] (712,188)<span >Release notes />
+[193] (932,186)<button aria-label='More tab actions' class='icon-button  standard ' id='button' />
+	[194] (932,186)<span  />
+more_vert
+[195] (967,186)<button aria-label='Close all tabs' class='icon-button  standard ' id='button' />
+	[196] (967,186)<span  />
+close
+[197] (819,577)<colab-scroller class='layout vertical grow' scrollable='true' />
+	Please follow our
+	[198] (770,242)<a aria-label='blog Link will open in a new tab' href='https://www.google.com/url?q=https%3A%2F%2Fmedium.com%2Fgoogle-colab'>blog />
+	to see more
+information about new features, tips and tricks, and featured notebooks such as
+	[199] (802,288)<a aria-label='Analyzing a Bank Failure with Colab Link will open in a new tab' href='https://www.google.com/url?q=https%3A%2F%2Fmedium.com%2Fgoogle-colab%2Fnoteworthy-notebooks-3-analyzing-a-bank-failure-with-colab-d23b372de313'>Analyzing a Bank Failure with Colab />
+	.
+	2026-02-23
+	Enterprise Runtimes are now available in Colab - get the familiar notebook you love with the enterprise power you need (
+	[200] (876,413)<a aria-label='learn more Link will open in a new tab' href='https://www.google.com/url?q=https%3A%2F%2Fblog.jetbrains.com%2Fpycharm%2F2026%2F01%2Fgoogle-colab-support-is-now-available-in-pycharm-2025-3-2%2F'>learn more />
+	):
+	Persistent runtimes
+	Configurable hardware & powerful GPUs
+	Seamless Vertex AI & BigQuery integration
+	Scale from idea to production without leaving your notebook.
+	Launched official PyCharm Colab extension.
+	[201] (730,591)<a aria-label='Learn more. Link will open in a new tab' href='https://www.google.com/url?q=https%3A%2F%2Fblog.jetbrains.com%2Fpycharm%2F2026%2F01%2Fgoogle-colab-support-is-now-available-in-pycharm-2025-3-2%2F'>Learn more. />
+	Published Colab's CPU Docker runtime image to us-docker.pkg.dev/colab-images/public/cpu-runtime
+	Python package upgrades
+	bigframes 2.31.0 -> 2.35.0
+	bokeh 3.7.3 -> 3.8.2
+	cudf-cu12 25.10.0 -> 26.2.1
+	cudf-polars-cu12 25.10.0 -> 26.2.1
+	cuml-cu12 25.10.0 -> 26.2.0
+	cupy-cuda12x 13.6.0 -> 14.0.1
+	dask 2025.9.1 -> 2026.1.2
+	dask-cuda 25.10.0 -> 26.2.0
+	dask-cudf-cu12 25.10.0 -> 26.2.1
+	fastapi: 0.123.10 -> 0.133.0
+	google-adk 1.21.0 -> 1.25.1
+	google-auth 2.43.0 -> 2.47.0
+	google-genai 1.55.0 -> 1.64.0
+spark
+[202] (852,976)<md-text-button >8:42 PM />
+	[203] (850,976)<button class='button' id='button' />
+		[204] (852,976)<span  />
+	[205] (827,976)<md-icon >check />
+[206] (939,976)<md-text-button >Python 3 />
+	[207] (937,976)<button class='button' id='button' />
+		[208] (939,976)<span  />
+	[209] (910,976)<md-icon >dns />
+[210] (62,976)<md-text-button >Variables />
+	[211] (60,976)<button class='button' id='button' />
+		[212] (62,976)<span  />
+	[213] (32,976)<md-icon >data_object />
+[214] (154,976)<md-text-button >Terminal />
+	[215] (152,976)<button class='button' id='button' />
+		[216] (154,976)<span  />
+	[217] (125,976)<md-icon >terminal />
+Insert code cell below (⌘/Ctrl+M B)
+
+</current_dom>

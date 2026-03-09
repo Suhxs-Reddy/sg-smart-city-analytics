@@ -1,0 +1,28 @@
+# Smart City — Full Project Checklist
+
+## Phase 0: Model Fine-Tuning (Cloud Only — Colab/Vast.ai)
+- [ ] YOLO fine-tuning on UA-DETRAC (5 iterative runs with tweaking)
+- [ ] BoxMOT tracking setup with pre-trained Re-ID
+- [ ] Weather classifier training (optional differentiator)
+
+## Phase 1: Data Collection Pipeline (CPU VM or Colab)
+- [ ] Multi-camera image collector with error handling
+- [ ] Multi-modal metadata enrichment (weather, taxi, PM2.5)
+- [ ] Collection run — minimum 2 weeks continuous
+
+## Phase 2: Kaggle Dataset Formatting
+- [ ] Auto-label all frames with fine-tuned YOLO
+- [ ] Stratified train/val/test splits
+- [ ] Dataset card, statistics, deduplication
+- [ ] Publish to Kaggle
+
+## Phase 3: Failure Analytics
+- [ ] 6-category failure taxonomy implementation
+- [ ] Per-camera reliability scorecards
+- [ ] Failure report generator (markdown + charts)
+
+## Phase 4: Model Drift Detection
+- [ ] PSI-based data drift monitoring
+- [ ] KS-test prediction drift monitoring
+- [ ] Concept drift correlation tracking
+- [ ] Drift dashboard with root cause suggestions
