@@ -37,12 +37,17 @@ def setup_environment():
     print("=" * 60)
 
     # Check GPU
-    gpu_check = subprocess.run(["nvidia-smi", "--query-gpu=name,memory.total",
-                                 "--format=csv,noheader"], capture_output=True, text=True)
-    if gpu_check.returncode == 0:
-        print(f"  GPU: {gpu_check.stdout.strip()}")
-    else:
-        print("  ⚠️  No GPU detected — training will be very slow")
+    try:
+        gpu_check = subprocess.run(["nvidia-smi", "--query-gpu=name,memory.total",
+                                     "--format=csv,noheader"], capture_output=True, text=True)
+        if gpu_check.returncode == 0:
+            print(f"  GPU: {gpu_check.stdout.strip()}")
+        else:
+            print("  ⚠️  No GPU detected — training will be very slow")
+            print("  To fix in Colab: Runtime -> Change runtime type -> T4 GPU")
+    except FileNotFoundError:
+        print("  ⚠️  No GPU detected (nvidia-smi not found) — training will be very slow")
+        print("  To fix in Colab: Runtime -> Change runtime type -> T4 GPU")
 
     # Install dependencies
     subprocess.run([sys.executable, "-m", "pip", "install", "-q",
