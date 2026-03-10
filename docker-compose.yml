@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   # ── API Server ────────────────────────────────
   api:
@@ -11,14 +13,12 @@ services:
     environment:
       - PYTHONPATH=/app
       - SG_DATA_DIR=/app/data/raw
+      - KAFKA_BROKER=redpanda:9092
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+    depends_on:
+      - redpanda
 
-  # ── Data Collector (continuous) ───────────────
+  # ── Data Collector (Ingestion to Kafka) ──────
   collector:
     build: .
     command: >
@@ -32,7 +32,78 @@ services:
     environment:
       - PYTHONPATH=/app
       - SG_DATA_DIR=/app/data/raw
+      - KAFKA_BROKER=redpanda:9092
     restart: unless-stopped
+    depends_on:
+      - redpanda
+
+  # ── Event Streaming Broker (Redpanda / Kafka) ─
+  redpanda:
+    image: vectorized/redpanda:latest
+    command:
+      - redpanda
+      - start
+      - --smp 1
+      - --memory 1G
+      - --reserve-memory 0M
+      - --overprovisioned
+      - --node-id 0
+      - --kafka-addr PLAINTEXT://0.0.0.0:29092,OUTSIDE://0.0.0.0:9092
+      - --advertise-kafka-addr PLAINTEXT://redpanda:29092,OUTSIDE://localhost:9092
+      - --pandaproxy-addr 0.0.0.0:8082
+      - --advertise-pandaproxy-addr localhost:8082
+    ports:
+      - "9092:9092"
+      - "8082:8082"
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Vector Database (Milvus Lite) for RAG ─────
+  milvus:
+    image: milvusdb/milvus:v2.3.2
+    command: ["milvus", "run", "standalone"]
+    environment:
+      ETCD_USE_EMBED: "true"
+      ETCD_DATA_DIR: "/var/lib/milvus/etcd"
+      MINIO_ADDRESS: "127.0.0.1:9000"
+    ports:
+      - "19530:19530"
+
+  # ── ML Inference Engine Worker ────────────────
+  inference_worker:
+    build: .
+    # In a real environment, this would run engine.py connected to Kafka
+    command: python -c "import time; print('Inference Worker Ready.'); time.sleep(86400)"
+    environment:
+      - PYTHONPATH=/app
+      - KAFKA_BROKER=redpanda:9092
+      - MILVUS_HOST=milvus
+      - MILVUS_PORT=19530
+    depends_on:
+      - redpanda
+      - milvus
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # ── Digital Twin State Manager ────────────────
+  digital_twin:
+    build: .
+    # Mocking execution for architecture demonstration
+    command: python -c "import time; print('Digital Twin Graph Manager Ready.'); time.sleep(86400)"
+    environment:
+      - PYTHONPATH=/app
+      - KAFKA_BROKER=redpanda:9092
+    depends_on:
+      - redpanda
+      - inference_worker
 
   # ── MLflow Tracking Server ───────────────────
   mlflow:
