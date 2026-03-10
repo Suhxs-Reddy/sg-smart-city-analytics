@@ -1,0 +1,60 @@
+# Singapore Smart City - Phase 8: Enterprise Cloud Infrastructure
+# Milvus Vector Database StatefulSet
+#
+# Connects the Milvus agentic engine to durable AWS/GCP storage to persist 
+# historical baseline embeddings for the Florence-2 RAG engine.
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: milvus
+  namespace: sg-smart-city
+spec:
+  serviceName: "milvus-headless"
+  replicas: 1 # Deploying Milvus Standalone for Phase 8 Architecture (can scale to distributed later)
+  selector:
+    matchLabels:
+      app: milvus
+  template:
+    metadata:
+      labels:
+        app: milvus
+    spec:
+      containers:
+      - name: milvus
+        image: milvusdb/milvus:v2.3.2
+        args: ["milvus", "run", "standalone"]
+        env:
+          - name: ETCD_USE_EMBED
+            value: "true"
+          - name: ETCD_DATA_DIR
+            value: "/var/lib/milvus/etcd"
+        ports:
+        - containerPort: 19530
+          name: grpc
+        volumeMounts:
+        - name: milvus-data
+          mountPath: /var/lib/milvus
+  volumeClaimTemplates:
+  - metadata:
+      name: milvus-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: "gp3"
+      resources:
+        requests:
+          storage: 50Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: milvus
+  namespace: sg-smart-city
+spec:
+  type: ClusterIP
+  ports:
+  - port: 19530
+    targetPort: 19530
+    name: grpc
+  selector:
+    app: milvus
