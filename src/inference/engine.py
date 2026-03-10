@@ -10,17 +10,22 @@ predictive pipeline that outputs the JSON payload expected by the Vercel Dashboa
 import logging
 from pathlib import Path
 
+import numpy as np
+
 # Try to import heavy ML libraries (graceful fallback if running in lightweight API container)
 try:
     import torch
+    from pymilvus import Collection, connections, utility
     from transformers import AutoModelForCausalLM, AutoProcessor
     from ultralytics import YOLO
+
     # ST-GNN custom modules would be imported here
     ML_AVAILABLE = True
 except ImportError:
     ML_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
+
 
 class HierarchicalInferenceEngine:
     def __init__(self, use_gpu: bool = True):
@@ -33,11 +38,28 @@ class HierarchicalInferenceEngine:
         self.l2_vlm_model = None
         self.l3_stgnn = None
 
-        # In-memory "Vector Store" / Feature Store Simulation for RAG
-        # In production this queries DynamoDB or a vector database
-        self.historical_baselines = {
-            "CAM_1": {"avg_count_1700": 45, "status": "Usually fluid at 5PM"},
-            "CAM_2": {"avg_count_1700": 120, "status": "Heavy peak hour congestion"},
+        # Initialize Vector Database Connection (Milvus/Qdrant)
+        self.vector_db_connected = False
+        try:
+            if ML_AVAILABLE:
+                logger.info("Connecting to Milvus Vector Database...")
+                connections.connect("default", host="localhost", port="19530")
+                if utility.has_collection("sg_traffic_baselines"):
+                    self.baseline_collection = Collection("sg_traffic_baselines")
+                    self.baseline_collection.load()
+                    self.vector_db_connected = True
+                    logger.info("Successfully connected to 'sg_traffic_baselines' collection.")
+                else:
+                    logger.warning(
+                        "Milvus collection 'sg_traffic_baselines' not found. Falling back to in-memory mock."
+                    )
+        except Exception as e:
+            logger.warning(f"Failed to connect to Milvus: {e}. Falling back to in-memory mock.")
+
+        # Fallback In-memory "Vector Store" if Milvus is offline
+        self.mock_baselines = {
+            "CAM_1": {"avg_count": 45, "status": "Usually fluid at this hour"},
+            "CAM_2": {"avg_count": 120, "status": "Heavy peak hour congestion"},
         }
 
     def load_models(
@@ -56,7 +78,7 @@ class HierarchicalInferenceEngine:
             self.l1_yolo = YOLO(yolo_path)
         except Exception as e:
             logger.warning(f"Could not load YOLO: {e}. Using base model.")
-            self.l1_yolo = YOLO('yolov11s.pt')
+            self.l1_yolo = YOLO("yolov11s.pt")
 
         logger.info(f"Loading Tier 2 (Diagnostic): Vision-Language Model {vlm_id}...")
         try:
@@ -64,7 +86,7 @@ class HierarchicalInferenceEngine:
             self.l2_vlm_model = AutoModelForCausalLM.from_pretrained(
                 vlm_id,
                 torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
-                trust_remote_code=True
+                trust_remote_code=True,
             ).to(self.device)
         except Exception as e:
             logger.warning(f"Could not load VLM: {e}. Diagnostic captions will be disabled.")
@@ -92,34 +114,64 @@ class HierarchicalInferenceEngine:
             logger.info(f"Anomaly detected at {camera_id}. Triggering L2 VLM Agentic RAG...")
 
             # --- RAG Retrieval Step ---
-            # Assume current time is 5:00 PM for demo purposes
-            baseline_context = self.historical_baselines.get(
-                camera_id,
-                {"avg_count_1700": 50, "status": "Unknown baseline"}
-            )
-            deviation = ((vehicle_count - baseline_context["avg_count_1700"]) / baseline_context["avg_count_1700"]) * 100
+            # Retrieve historical baseline from Vector Database or Mock
+            baseline_context = {"avg_count": 50, "status": "Unknown baseline"}
+
+            if self.vector_db_connected:
+                try:
+                    # In a true deployment, we embed the current (time_of_day, camera_id) to query Milvus
+                    # Example conceptual query vector: [hour/24, day/7, is_weekend, camera_lat, camera_lon]
+                    search_params = {"metric_type": "L2", "params": {"nprobe": 10}}
+                    # Mocking the query vector for structural purposes
+                    dummy_query_vector = np.random.rand(1, 128).tolist()
+
+                    results = self.baseline_collection.search(
+                        data=dummy_query_vector,
+                        anns_field="time_space_embedding",
+                        param=search_params,
+                        limit=1,
+                        expr=f"camera_id == '{camera_id}'",
+                    )
+
+                    if results and len(results[0]) > 0:
+                        match = results[0][0]
+                        baseline_context["avg_count"] = match.entity.get("historical_avg_count")
+                        baseline_context["status"] = match.entity.get("historical_status_desc")
+                        logger.info(
+                            f"Vector DB RAG Hit: Found baseline {baseline_context['avg_count']} for {camera_id}"
+                        )
+                except Exception as e:
+                    logger.error(f"Vector DB query failed: {e}")
+                    baseline_context = self.mock_baselines.get(camera_id, baseline_context)
+            else:
+                baseline_context = self.mock_baselines.get(camera_id, baseline_context)
+
+            deviation = (
+                (vehicle_count - baseline_context["avg_count"])
+                / max(1, baseline_context["avg_count"])
+            ) * 100
 
             # --- Prompt Engineering / Context Injection ---
             rag_prompt = (
                 f"<DETAILED_CAPTION> System Context: You are a Singapore Traffic AI. "
                 f"Camera {camera_id} currently sees {vehicle_count} vehicles. "
-                f"Historical baseline for 5:00 PM is {baseline_context['avg_count_1700']} vehicles "
+                f"Historical baseline for this time is {baseline_context['avg_count']} vehicles "
                 f"({baseline_context['status']}). This is a {deviation:+.1f}% deviation. "
                 f"Describe the scene and the severity of the anomaly."
             )
 
             # --- VLM Generation ---
             inputs = self.l2_vlm_processor(
-                text=rag_prompt,
-                images=results.orig_img,
-                return_tensors="pt"
+                text=rag_prompt, images=results.orig_img, return_tensors="pt"
             ).to(self.device)
 
             generated_ids = self.l2_vlm_model.generate(**inputs, max_new_tokens=1024)
             text = self.l2_vlm_processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
             # Clean up output string to remove prompt echo
-            anomaly_caption = text.replace(rag_prompt.replace("<DETAILED_CAPTION> ", ""), "").strip()
+            anomaly_caption = text.replace(
+                rag_prompt.replace("<DETAILED_CAPTION> ", ""), ""
+            ).strip()
             anomaly_caption = f"Agentic VLM RAG: {anomaly_caption}"
 
         # 3. Level 3: Predictive (ST-GNN)
@@ -133,8 +185,9 @@ class HierarchicalInferenceEngine:
             "id": camera_id,
             "l1_yolo_count": vehicle_count,
             "l2_vlm_anomaly": anomaly_caption,
-            "l3_forecast_15m": forecast
+            "l3_forecast_15m": forecast,
         }
+
 
 if __name__ == "__main__":
     engine = HierarchicalInferenceEngine(use_gpu=False)
