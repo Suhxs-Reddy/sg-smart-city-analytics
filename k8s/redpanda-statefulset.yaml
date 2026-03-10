@@ -1,0 +1,65 @@
+# Singapore Smart City - Phase 8: Enterprise Cloud Infrastructure
+# Redpanda (Kafka) Event Bus StatefulSet
+# 
+# A StatefulSet ensures that even if a Redpanda pod dies, it perfectly reattaches 
+# to its PersistentVolumeClaim (PVC), preventing any loss of real-time camera frames.
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redpanda
+  namespace: sg-smart-city
+spec:
+  serviceName: "redpanda-headless"
+  replicas: 3
+  selector:
+    matchLabels:
+      app: redpanda
+  template:
+    metadata:
+      labels:
+        app: redpanda
+    spec:
+      containers:
+      - name: redpanda
+        image: vectorized/redpanda:latest
+        args:
+          - redpanda
+          - start
+          - --smp 1
+          - --memory 2G
+          - --reserve-memory 0M
+          - --overprovisioned
+          - --kafka-addr PLAINTEXT://0.0.0.0:9092
+          - --advertise-kafka-addr PLAINTEXT://redpanda-headless.sg-smart-city.svc.cluster.local:9092
+        ports:
+        - containerPort: 9092
+          name: kafka
+        - containerPort: 8082
+          name: pandaproxy
+        volumeMounts:
+        - name: redpanda-data
+          mountPath: /var/lib/redpanda/data
+  volumeClaimTemplates:
+  - metadata:
+      name: redpanda-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: "gp3" # Requires AWS EBS CSI Document deployed
+      resources:
+        requests:
+          storage: 100Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redpanda-headless
+  namespace: sg-smart-city
+spec:
+  ports:
+  - port: 9092
+    name: kafka
+    targetPort: 9092
+  clusterIP: None
+  selector:
+    app: redpanda
