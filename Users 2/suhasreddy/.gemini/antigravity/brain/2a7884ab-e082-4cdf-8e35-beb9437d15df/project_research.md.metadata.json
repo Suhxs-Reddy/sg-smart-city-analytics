@@ -1,5 +1,0 @@
-{
-  "artifactType": "ARTIFACT_TYPE_OTHER",
-  "summary": "Comprehensive bottom-to-top research document for the Singapore Smart City project. Covers: (1) WHY — the problem, what makes a smart city project impressive vs. generic, (2) WHAT — the full system design with every component justified, (3) HOW — best-fit model choices with evidence and comparisons, (4) WHERE — compute strategy, (5) WHAT MAKES IT IMPRESSIVE — the 7 things that differentiate this from generic projects. Every model choice is justified with benchmarks and rationale. Designed for someone who wants to use the best tools intelligently, not invent new architectures.",
-  "updatedAt": "2026-03-08T22:43:05.082832Z"
-}
