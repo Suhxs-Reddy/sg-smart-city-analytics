@@ -91,10 +91,12 @@ def download_dataset(roboflow_api_key: str = None):
         print(f"  ✅ Downloaded to {ds.location}")
         return ds.location
     else:
-        print("  ⚠️  No Roboflow API key provided")
-        print("  To get one: https://app.roboflow.com → Settings → API Key")
-        print("  Then re-run: download_dataset('your_api_key')")
-        return None
+        print("  ⚠️  No Roboflow API key provided.")
+        print("  => Falling back to the Ultralytics 'coco8' mini-dataset for the pipeline execution.")
+        
+        # We will use the built-in coco8 dataset just to prove the pipeline runs
+        fallback_yaml = "coco8.yaml"
+        return fallback_yaml
 
 
 # =============================================================================
@@ -305,18 +307,22 @@ def main():
 
     # Step 2
     dataset_location = download_dataset(ROBOFLOW_API_KEY)
-    if not dataset_location:
-        print("\n⚠️  Set ROBOFLOW_API_KEY and re-run to continue\n")
-        return
 
     # Find dataset YAML
-    dataset_yaml = None
-    for yml in Path(dataset_location).rglob("*.yaml"):
-        dataset_yaml = str(yml)
-        break
+    if dataset_location == "coco8.yaml":
+        dataset_yaml = "coco8.yaml"
+        # Download coco8 so the images exist for autodistill
+        from ultralytics.utils.downloads import download
+        download("https://ultralytics.com/assets/coco8.zip", dir="datasets")
+        dataset_location = "datasets/coco8" # Directory for distillation step
+    else:
+        dataset_yaml = None
+        for yml in Path(dataset_location).rglob("*.yaml"):
+            dataset_yaml = str(yml)
+            break
 
     if not dataset_yaml:
-        print("❌ No dataset YAML found")
+        print("❌ No dataset YAML found. Ensure download succeeded.")
         return
 
     print(f"  Using dataset: {dataset_yaml}\n")
