@@ -103,7 +103,7 @@ def download_dataset(roboflow_api_key: str = None):
 # Step 3: Teacher-Student Knowledge Distillation (Grounding DINO -> YOLO)
 # =============================================================================
 
-def apply_knowledge_distillation(dataset_dir: str):
+def apply_knowledge_distillation(dataset_dir: str, dataset_yaml: str):
     """Uses Grounding DINO (Teacher) to generate pseudo-labels for YOLO (Student)."""
     print("=" * 60)
     print("  Step 3: Knowledge Distillation (Teacher -> Student)")
@@ -128,13 +128,13 @@ def apply_knowledge_distillation(dataset_dir: str):
         # In a real run, you pass the raw images folder to base_model.label()
         # dataset = base_model.label(input_folder=f"{dataset_dir}/images", extension=".jpg")
         print("  ✅ Pseudo-labels successfully generated. YOLO dataset formatted.")
+        return f"{dataset_dir}/data.yaml"
         
     except ImportError:
         print("  ⚠️  Autodistill not installed. Mocking distillation step for demo.")
         print("  => Generating pseudo-labels...")
         print("  ✅ Knowledge Distillation successful. Features mapped to YOLO format.")
-        
-    return f"{dataset_dir}/data.yaml"
+        return dataset_yaml
 
 
 # =============================================================================
@@ -328,7 +328,7 @@ def main():
     print(f"  Using dataset: {dataset_yaml}\n")
 
     # Step 3: Distillation
-    distilled_yaml = apply_knowledge_distillation(dataset_location)
+    distilled_yaml = apply_knowledge_distillation(dataset_location, dataset_yaml)
 
     # Step 4: Train Student
     train_yolo(distilled_yaml, epochs=EPOCHS, run_name=RUN_NAME)
