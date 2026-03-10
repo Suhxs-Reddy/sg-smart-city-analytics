@@ -29,7 +29,12 @@ logger = logging.getLogger(__name__)
 
 class HierarchicalInferenceEngine:
     def __init__(self, use_gpu: bool = True):
-        self.device = "cuda" if use_gpu and torch.cuda.is_available() else "cpu"
+        if use_gpu and torch.cuda.is_available():
+            self.device = "cuda"
+        elif use_gpu and hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            self.device = "mps"
+        else:
+            self.device = "cpu"
         self.models_loaded = False
 
         # Placeholders for the 3 Tiers
@@ -85,7 +90,7 @@ class HierarchicalInferenceEngine:
             self.l2_vlm_processor = AutoProcessor.prompt_mode(vlm_id, trust_remote_code=True)
             self.l2_vlm_model = AutoModelForCausalLM.from_pretrained(
                 vlm_id,
-                torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+                torch_dtype=torch.float16 if self.device in ["cuda", "mps"] else torch.float32,
                 trust_remote_code=True,
             ).to(self.device)
         except Exception as e:

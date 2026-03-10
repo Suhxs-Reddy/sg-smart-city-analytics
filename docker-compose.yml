@@ -85,13 +85,6 @@ services:
     depends_on:
       - redpanda
       - milvus
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
 
   # ── Digital Twin State Manager ────────────────
   digital_twin:
