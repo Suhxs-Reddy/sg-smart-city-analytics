@@ -24,8 +24,9 @@ logger = logging.getLogger(__name__)
 @dataclass
 class BenchmarkResult:
     """Result from benchmarking one model on one condition."""
+
     model_name: str
-    condition: str                  # "clear", "rain", "night", "low_res", "all"
+    condition: str  # "clear", "rain", "night", "low_res", "all"
     num_images: int = 0
 
     # Detection metrics
@@ -40,8 +41,8 @@ class BenchmarkResult:
     throughput_fps: float = 0.0
 
     # Quality metrics
-    low_confidence_rate: float = 0.0   # % of detections below 0.25
-    zero_detection_rate: float = 0.0   # % of images with 0 detections
+    low_confidence_rate: float = 0.0  # % of detections below 0.25
+    zero_detection_rate: float = 0.0  # % of images with 0 detections
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -109,10 +110,7 @@ class ModelBenchmark:
                 continue
 
             images = images[:max_images_per_condition]
-            logger.info(
-                f"Benchmarking {model_name} on {condition}: "
-                f"{len(images)} images"
-            )
+            logger.info(f"Benchmarking {model_name} on {condition}: {len(images)} images")
 
             confidences = []
             inference_times = []
@@ -157,12 +155,8 @@ class ModelBenchmark:
                 mean_inference_ms=round(float(np.mean(inference_times)), 1),
                 p95_inference_ms=round(float(np.percentile(inference_times, 95)), 1),
                 throughput_fps=round(1000 / np.mean(inference_times), 1) if inference_times else 0,
-                low_confidence_rate=round(
-                    low_conf_count / max(total_detections, 1) * 100, 1
-                ),
-                zero_detection_rate=round(
-                    zero_detection_images / max(len(images), 1) * 100, 1
-                ),
+                low_confidence_rate=round(low_conf_count / max(total_detections, 1) * 100, 1),
+                zero_detection_rate=round(zero_detection_images / max(len(images), 1) * 100, 1),
             )
 
             results.append(bench_result)
@@ -196,9 +190,7 @@ class ModelBenchmark:
         # Build comparison table (model x condition for key metrics)
         comparison = {
             "models_compared": list(models.keys()),
-            "conditions_tested": list(
-                set(r.condition for r in self.results)
-            ),
+            "conditions_tested": list(set(r.condition for r in self.results)),
             "per_model": models,
         }
 
@@ -246,7 +238,8 @@ def torch_in(tensor, values):
     Helper to filter YOLO class predictions to traffic-relevant classes.
     """
     import torch
+
     mask = torch.zeros(len(tensor), dtype=torch.bool)
     for v in values:
-        mask |= (tensor == v)
+        mask |= tensor == v
     return mask

@@ -99,7 +99,8 @@ class DatasetFormatter:
         df = df.copy()
         df["hour"] = pd.to_datetime(df["timestamp"]).dt.hour
         df["time_bucket"] = pd.cut(
-            df["hour"], bins=[0, 6, 12, 18, 24],
+            df["hour"],
+            bins=[0, 6, 12, 18, 24],
             labels=["night", "morning", "afternoon", "evening"],
         )
 
@@ -122,8 +123,8 @@ class DatasetFormatter:
             n_val = max(1, int(n * self.val_ratio))
 
             train_dfs.append(group.iloc[:n_train])
-            val_dfs.append(group.iloc[n_train:n_train + n_val])
-            test_dfs.append(group.iloc[n_train + n_val:])
+            val_dfs.append(group.iloc[n_train : n_train + n_val])
+            test_dfs.append(group.iloc[n_train + n_val :])
 
         splits = {
             "train": pd.concat(train_dfs, ignore_index=True) if train_dfs else pd.DataFrame(),
@@ -201,9 +202,7 @@ class DatasetFormatter:
         # Resolution distribution
         if "image_width" in all_data.columns:
             res_dist = (
-                all_data.groupby(["image_width", "image_height"])
-                .size()
-                .reset_index(name="count")
+                all_data.groupby(["image_width", "image_height"]).size().reset_index(name="count")
             )
             stats["resolution_distribution"] = res_dist.to_dict(orient="records")
 
@@ -295,7 +294,7 @@ class DatasetFormatter:
         card = f"""# Singapore Smart City Traffic — Multi-Modal Dataset
 
 ## Overview
-Temporally continuous traffic camera images from Singapore's {stats.get('num_cameras', 90)} government LTA cameras,
+Temporally continuous traffic camera images from Singapore's {stats.get("num_cameras", 90)} government LTA cameras,
 enriched with weather, taxi availability, and air quality metadata.
 
 ## Key Features
@@ -305,10 +304,10 @@ enriched with weather, taxi availability, and air quality metadata.
 - **Pre-labeled**: YOLO-format annotations for 6 traffic classes
 
 ## Statistics
-- **Total images**: {stats.get('total_images', 'N/A'):,}
-- **Cameras**: {stats.get('num_cameras', 'N/A')}
-- **Splits**: Train {stats['split_sizes'].get('train', 0):,} / Val {stats['split_sizes'].get('val', 0):,} / Test {stats['split_sizes'].get('test', 0):,}
-- **Date range**: {stats.get('date_range', {}).get('start', 'N/A')} to {stats.get('date_range', {}).get('end', 'N/A')}
+- **Total images**: {stats.get("total_images", "N/A"):,}
+- **Cameras**: {stats.get("num_cameras", "N/A")}
+- **Splits**: Train {stats["split_sizes"].get("train", 0):,} / Val {stats["split_sizes"].get("val", 0):,} / Test {stats["split_sizes"].get("test", 0):,}
+- **Date range**: {stats.get("date_range", {}).get("start", "N/A")} to {stats.get("date_range", {}).get("end", "N/A")}
 
 ## Classes
 | ID | Class | Description |

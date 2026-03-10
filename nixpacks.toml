@@ -1,0 +1,11 @@
+[phases.setup]
+nixPkgs = ["python311", "gcc"]
+
+[phases.install]
+cmds = ["pip install -r requirements.txt"]
+
+[phases.build]
+cmds = ["mkdir -p models data/raw data/processed data/detections data/tracks"]
+
+[start]
+cmd = "uvicorn src.api.server:app --host 0.0.0.0 --port ${PORT:-8000}"

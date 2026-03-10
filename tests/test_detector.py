@@ -22,6 +22,7 @@ from src.detection.detector import (
 # Fixtures
 # =============================================================================
 
+
 @pytest.fixture
 def sample_detection_result():
     """A realistic detection result for testing."""
@@ -44,27 +45,37 @@ def sample_detection_result():
         is_grayscale=False,
         detections=[
             {
-                "class_id": 2, "class_name": "car", "confidence": 0.91,
+                "class_id": 2,
+                "class_name": "car",
+                "confidence": 0.91,
                 "bbox_normalized": [0.3, 0.5, 0.1, 0.08],
                 "bbox_xyxy": [480.0, 496.0, 672.0, 582.4],
             },
             {
-                "class_id": 2, "class_name": "car", "confidence": 0.75,
+                "class_id": 2,
+                "class_name": "car",
+                "confidence": 0.75,
                 "bbox_normalized": [0.6, 0.4, 0.08, 0.07],
                 "bbox_xyxy": [1075.2, 388.8, 1228.8, 464.4],
             },
             {
-                "class_id": 2, "class_name": "car", "confidence": 0.68,
+                "class_id": 2,
+                "class_name": "car",
+                "confidence": 0.68,
                 "bbox_normalized": [0.15, 0.6, 0.09, 0.07],
                 "bbox_xyxy": [201.6, 610.2, 374.4, 685.8],
             },
             {
-                "class_id": 7, "class_name": "truck", "confidence": 0.82,
+                "class_id": 7,
+                "class_name": "truck",
+                "confidence": 0.82,
                 "bbox_normalized": [0.5, 0.3, 0.15, 0.12],
                 "bbox_xyxy": [816.0, 259.2, 1104.0, 388.8],
             },
             {
-                "class_id": 0, "class_name": "person", "confidence": 0.45,
+                "class_id": 0,
+                "class_name": "person",
+                "confidence": 0.45,
                 "bbox_normalized": [0.8, 0.7, 0.03, 0.1],
                 "bbox_xyxy": [1507.2, 702.0, 1564.8, 810.0],
             },
@@ -92,7 +103,9 @@ def night_detection_result():
         is_night=True,
         detections=[
             {
-                "class_id": 2, "class_name": "car", "confidence": 0.35,
+                "class_id": 2,
+                "class_name": "car",
+                "confidence": 0.35,
                 "bbox_normalized": [0.5, 0.5, 0.1, 0.08],
                 "bbox_xyxy": [864.0, 496.8, 1056.0, 583.2],
             },
@@ -104,6 +117,7 @@ def night_detection_result():
 # =============================================================================
 # DetectionResult Tests
 # =============================================================================
+
 
 class TestDetectionResult:
     def test_serialization(self, sample_detection_result):
@@ -141,6 +155,7 @@ class TestDetectionResult:
 # =============================================================================
 # YOLO Label Generation Tests
 # =============================================================================
+
 
 class TestYoloLabelGeneration:
     def test_basic_generation(self, sample_detection_result, tmp_path):
@@ -209,9 +224,9 @@ class TestYoloLabelGeneration:
             class_ids.add(int(line.split()[0]))
 
         # car→0, truck→3, person→4
-        assert 0 in class_ids   # car
-        assert 3 in class_ids   # truck
-        assert 4 in class_ids   # person
+        assert 0 in class_ids  # car
+        assert 3 in class_ids  # truck
+        assert 4 in class_ids  # person
 
 
 class TestTrafficClasses:
