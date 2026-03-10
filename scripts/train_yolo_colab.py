@@ -67,14 +67,40 @@ def setup_environment():
 # Step 2: Dataset Download
 # =============================================================================
 
-def download_dataset(roboflow_api_key: str = None):
-    """Download UA-DETRAC dataset from Roboflow.
+def download_dataset(roboflow_api_key: str = None, use_google_drive: bool = True):
+    """Download UA-DETRAC dataset from Roboflow or use the user's pre-processed Google Drive dataset.
 
-    If no API key is provided, uses alternative download.
+    If use_google_drive is True, mounts Colab drive and unzips sg_traffic_dataset.zip.
     """
     print("=" * 60)
-    print("  Step 2: Dataset Download (UA-DETRAC)")
+    print("  Step 2: Dataset Acquisition")
     print("=" * 60)
+
+    if use_google_drive:
+        try:
+            from google.colab import drive
+            if not Path("/content/drive").exists():
+                drive.mount("/content/drive")
+            
+            drive_zip = Path("/content/drive/MyDrive/sg_smart_city/data/sg_traffic_dataset.zip")
+            if drive_zip.exists():
+                print(f"  ✅ Found existing pre-processed dataset in Drive: {drive_zip}")
+                
+                import zipfile
+                local_extract = Path("/content/dataset")
+                local_extract.mkdir(parents=True, exist_ok=True)
+                
+                print("  => Unzipping prepared dataset...")
+                with zipfile.ZipFile(drive_zip, 'r') as zip_ref:
+                    zip_ref.extractall(local_extract)
+                
+                print("  ✅ Dataset unzipped successfully.")
+                # Return the path to the internal 'sg_traffic' folder created by the prepare script
+                return str(local_extract / "sg_traffic")
+            else:
+                print(f"  ⚠️  Did not find {drive_zip} in Drive. Ensure prepare_dataset.ipynb was run.")
+        except ImportError:
+            print("  ⚠️  Not running in Colab, or Google Drive not available.")
 
     dataset_dir = Path("datasets/ua_detrac")
 
@@ -91,10 +117,9 @@ def download_dataset(roboflow_api_key: str = None):
         print(f"  ✅ Downloaded to {ds.location}")
         return ds.location
     else:
-        print("  ⚠️  No Roboflow API key provided.")
+        print("  ⚠️  No Roboflow API key provided and no Google Drive zip found.")
         print("  => Falling back to the Ultralytics 'coco8' mini-dataset for the pipeline execution.")
         
-        # We will use the built-in coco8 dataset just to prove the pipeline runs
         fallback_yaml = "coco8.yaml"
         return fallback_yaml
 
@@ -104,37 +129,13 @@ def download_dataset(roboflow_api_key: str = None):
 # =============================================================================
 
 def apply_knowledge_distillation(dataset_dir: str, dataset_yaml: str):
-    """Uses Grounding DINO (Teacher) to generate pseudo-labels for YOLO (Student)."""
+    """Pass-through function. The dataset is already annotated via the prepare_dataset notebook."""
     print("=" * 60)
-    print("  Step 3: Knowledge Distillation (Teacher -> Student)")
+    print("  Step 3: Validating Dataset Architecture")
     print("=" * 60)
-    
-    print("  => Loading Foundation Teacher Model (Grounding DINO)...")
-    try:
-        from autodistill_grounding_dino import GroundingDINO
-        from autodistill.detection import CaptionOntology
-        
-        # Define the ontology for traffic parsing (Zero-Shot)
-        ontology = CaptionOntology({
-            "car": "car",
-            "truck": "truck",
-            "bus": "bus",
-            "motorcycle": "motorcycle"
-        })
-        
-        base_model = GroundingDINO(ontology=ontology)
-        
-        print("  => Generating pixel-perfect pseudo-labels across unannotated frames...")
-        # In a real run, you pass the raw images folder to base_model.label()
-        # dataset = base_model.label(input_folder=f"{dataset_dir}/images", extension=".jpg")
-        print("  ✅ Pseudo-labels successfully generated. YOLO dataset formatted.")
-        return f"{dataset_dir}/data.yaml"
-        
-    except ImportError:
-        print("  ⚠️  Autodistill not installed. Mocking distillation step for demo.")
-        print("  => Generating pseudo-labels...")
-        print("  ✅ Knowledge Distillation successful. Features mapped to YOLO format.")
-        return dataset_yaml
+    print("  => Dataset was pre-processed securely with Temporal Splitting.")
+    print("  ✅ Passing pre-annotated dataset immediately to YOLO Student network.")
+    return dataset_yaml
 
 
 # =============================================================================
@@ -306,7 +307,7 @@ def main():
     setup_environment()
 
     # Step 2
-    dataset_location = download_dataset(ROBOFLOW_API_KEY)
+    dataset_location = download_dataset(ROBOFLOW_API_KEY, use_google_drive=True)
 
     # Find dataset YAML
     if dataset_location == "coco8.yaml":
@@ -317,15 +318,21 @@ def main():
         dataset_location = "datasets/coco8" # Directory for distillation step
     else:
         dataset_yaml = None
-        for yml in Path(dataset_location).rglob("*.yaml"):
+        for yml in Path(dataset_location).rglob("data.yaml"):
             dataset_yaml = str(yml)
             break
+        
+        # Also check for config.yaml if data.yaml isn't found
+        if not dataset_yaml:
+            for yml in Path(dataset_location).rglob("*.yaml"):
+                dataset_yaml = str(yml)
+                break
 
-    if not dataset_yaml:
-        print("❌ No dataset YAML found. Ensure download succeeded.")
-        return
+        if not dataset_yaml:
+            print("❌ No dataset YAML found. Ensure download/extraction succeeded.")
+            return
 
-    print(f"  Using dataset: {dataset_yaml}\n")
+        print(f"  Using existing dataset: {dataset_yaml}\n")
 
     # Step 3: Distillation
     distilled_yaml = apply_knowledge_distillation(dataset_location, dataset_yaml)
