@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 # Dataset Classes
 # =============================================================================
 
+
 class TrafficTimeSeriesDataset(Dataset):
     """Dataset for per-camera LSTM prediction.
 
@@ -54,7 +55,7 @@ class TrafficTimeSeriesDataset(Dataset):
         return len(self.data) - self.window_size - self.horizon + 1
 
     def __getitem__(self, idx):
-        x = self.data[idx: idx + self.window_size]              # (window, features)
+        x = self.data[idx : idx + self.window_size]  # (window, features)
         y = self.data[idx + self.window_size + self.horizon - 1, 0]  # vehicle count
         return x, y
 
@@ -90,14 +91,17 @@ class SpatialTemporalDataset(Dataset):
         return len(self.features) - self.window_size - self.horizon + 1
 
     def __getitem__(self, idx):
-        x = self.features[idx: idx + self.window_size]                    # (window, nodes, features)
-        y = self.features[idx + self.window_size + self.horizon - 1, :, 0]  # (nodes,) — vehicle counts
+        x = self.features[idx : idx + self.window_size]  # (window, nodes, features)
+        y = self.features[
+            idx + self.window_size + self.horizon - 1, :, 0
+        ]  # (nodes,) — vehicle counts
         return x, y, self.adj
 
 
 # =============================================================================
 # Stage 1: LSTM Baseline — Per-Camera Prediction
 # =============================================================================
+
 
 class TrafficLSTM(nn.Module):
     """LSTM-based time series predictor for single-camera traffic.
@@ -169,6 +173,7 @@ class TrafficLSTM(nn.Module):
 # Stage 2: Spatial-Temporal Graph Model
 # =============================================================================
 
+
 class GraphAttentionLayer(nn.Module):
     """Graph Attention Network (GAT) layer for spatial message passing.
 
@@ -221,7 +226,11 @@ class GraphAttentionLayer(nn.Module):
         attention = torch.nan_to_num(attention, 0.0)
 
         # Aggregate neighbor features
-        h_prime = torch.einsum("bnjh,bnjhd->bnhd", attention, h_j.transpose(2, 3).contiguous().view(B, N, N, self.num_heads, self.head_dim))
+        h_prime = torch.einsum(
+            "bnjh,bnjhd->bnhd",
+            attention,
+            h_j.transpose(2, 3).contiguous().view(B, N, N, self.num_heads, self.head_dim),
+        )
         h_prime = h_prime.reshape(B, N, -1)  # (B, N, out_features)
 
         return self.norm(h_prime + self.W(x))  # Residual connection
@@ -236,9 +245,7 @@ class TemporalTransformerLayer(nn.Module):
     def __init__(self, d_model: int, nhead: int = 4, dropout: float = 0.1):
         super().__init__()
 
-        self.self_attn = nn.MultiheadAttention(
-            d_model, nhead, dropout=dropout, batch_first=True
-        )
+        self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout, batch_first=True)
         self.ffn = nn.Sequential(
             nn.Linear(d_model, d_model * 4),
             nn.GELU(),
@@ -298,16 +305,17 @@ class SpatialTemporalPredictor(nn.Module):
         self.input_proj = nn.Linear(num_features, hidden_dim)
 
         # Spatial GAT layers
-        self.gat_layers = nn.ModuleList([
-            GraphAttentionLayer(hidden_dim, hidden_dim, num_heads)
-            for _ in range(num_gat_layers)
-        ])
+        self.gat_layers = nn.ModuleList(
+            [GraphAttentionLayer(hidden_dim, hidden_dim, num_heads) for _ in range(num_gat_layers)]
+        )
 
         # Temporal Transformer layers
-        self.temporal_layers = nn.ModuleList([
-            TemporalTransformerLayer(hidden_dim, num_heads, dropout)
-            for _ in range(num_transformer_layers)
-        ])
+        self.temporal_layers = nn.ModuleList(
+            [
+                TemporalTransformerLayer(hidden_dim, num_heads, dropout)
+                for _ in range(num_transformer_layers)
+            ]
+        )
 
         # Prediction head
         self.predictor = nn.Sequential(
@@ -358,6 +366,7 @@ class SpatialTemporalPredictor(nn.Module):
 # Training Utilities
 # =============================================================================
 
+
 class PredictionTrainer:
     """Handles training and evaluation of prediction models."""
 
@@ -369,9 +378,7 @@ class PredictionTrainer:
     ):
         self.device = self._resolve_device(device)
         self.model = model.to(self.device)
-        self.optimizer = torch.optim.AdamW(
-            model.parameters(), lr=learning_rate, weight_decay=1e-4
-        )
+        self.optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=1e-4)
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             self.optimizer, mode="min", patience=5, factor=0.5
         )
@@ -448,7 +455,11 @@ class PredictionTrainer:
 
         # MAPE (avoid division by zero)
         mask = targets > 0
-        mape = float(np.mean(np.abs((preds[mask] - targets[mask]) / targets[mask]))) * 100 if mask.any() else 0.0
+        mape = (
+            float(np.mean(np.abs((preds[mask] - targets[mask]) / targets[mask]))) * 100
+            if mask.any()
+            else 0.0
+        )
 
         return {
             "loss": total_loss / max(batches, 1),
@@ -474,10 +485,7 @@ class PredictionTrainer:
         history = {"train_loss": [], "val_loss": [], "val_metrics": []}
         no_improve = 0
 
-        logger.info(
-            f"Training on {self.device} | "
-            f"epochs={epochs}, patience={patience}"
-        )
+        logger.info(f"Training on {self.device} | epochs={epochs}, patience={patience}")
 
         for epoch in range(epochs):
             train_loss = self.train_epoch(train_loader)
@@ -503,7 +511,7 @@ class PredictionTrainer:
             if (epoch + 1) % 5 == 0 or epoch == 0:
                 lr = self.optimizer.param_groups[0]["lr"]
                 logger.info(
-                    f"Epoch {epoch+1}/{epochs} | "
+                    f"Epoch {epoch + 1}/{epochs} | "
                     f"Train: {train_loss:.4f} | "
                     f"Val: {val_loss:.4f} | "
                     f"RMSE: {val_metrics['rmse']:.3f} | "
@@ -513,20 +521,18 @@ class PredictionTrainer:
 
             if no_improve >= patience:
                 logger.info(
-                    f"Early stopping at epoch {epoch+1} "
-                    f"(no improvement for {patience} epochs)"
+                    f"Early stopping at epoch {epoch + 1} (no improvement for {patience} epochs)"
                 )
                 break
 
-        logger.info(
-            f"Training complete | Best val loss: {self.best_val_loss:.4f}"
-        )
+        logger.info(f"Training complete | Best val loss: {self.best_val_loss:.4f}")
         return history
 
 
 # =============================================================================
 # Feature Engineering Utilities
 # =============================================================================
+
 
 def prepare_features(
     metadata_records: list[dict],
@@ -539,7 +545,9 @@ def prepare_features(
     """
     if feature_columns is None:
         feature_columns = [
-            "num_vehicles", "temperature_celsius", "pm25_reading",
+            "num_vehicles",
+            "temperature_celsius",
+            "pm25_reading",
             "taxi_count_nearby_5km",
         ]
 
@@ -606,8 +614,7 @@ def build_adjacency_matrix(
 
             # Simple distance approximation (sufficient for Singapore)
             dist_km = np.sqrt(
-                ((lat1 - lat2) * 111) ** 2 +
-                ((lng1 - lng2) * 111 * np.cos(np.radians(1.35))) ** 2
+                ((lat1 - lat2) * 111) ** 2 + ((lng1 - lng2) * 111 * np.cos(np.radians(1.35))) ** 2
             )
 
             if dist_km <= distance_threshold_km:

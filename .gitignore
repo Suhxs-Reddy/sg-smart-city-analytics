@@ -57,3 +57,4 @@ mlflow_data/
 .pytest_cache/
 .coverage
 htmlcov/
+.env.deployment
