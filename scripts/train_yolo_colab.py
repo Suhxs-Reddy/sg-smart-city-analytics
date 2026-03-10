@@ -192,7 +192,7 @@ def train_yolo(
         verbose=True,
     )
 
-    print(f"\n  ✅ Student Training complete")
+    print(f"\n  ✅ Student Training complete. Exporting weights from: {results.save_dir}")
     return results
 
 
@@ -248,13 +248,13 @@ def export_model(
 # Step 6: Save to Google Drive (Colab) or Output (Kaggle)
 # =============================================================================
 
-def save_results(run_name: str = "sg_traffic_v1"):
+def save_results(run_name: str, actual_save_dir: str):
     """Save training results to persistent storage."""
     print("=" * 60)
     print("  Step 6: Saving Results")
     print("=" * 60)
 
-    src = Path(f"runs/train/{run_name}")
+    src = Path(actual_save_dir)
 
     # Try Google Drive (Colab)
     drive_path = Path("/content/drive/MyDrive/sg_smart_city")
@@ -331,19 +331,22 @@ def main():
     distilled_yaml = apply_knowledge_distillation(dataset_location, dataset_yaml)
 
     # Step 4: Train Student
-    train_yolo(distilled_yaml, epochs=EPOCHS, run_name=RUN_NAME)
+    results = train_yolo(distilled_yaml, epochs=EPOCHS, run_name=RUN_NAME)
+    
+    # Dynamically grab the exact absolute output path that Ultralytics generated
+    best_weights_path = Path(results.save_dir) / "weights" / "best.pt"
 
     # Step 5: Evaluate
     evaluate_model(
-        f"runs/train/{RUN_NAME}/weights/best.pt",
+        str(best_weights_path),
         distilled_yaml,
     )
 
     # Step 6: Export
-    export_model(f"runs/train/{RUN_NAME}/weights/best.pt")
+    export_model(str(best_weights_path))
 
     # Step 7: Save
-    save_results(RUN_NAME)
+    save_results(RUN_NAME, str(results.save_dir))
 
     print("\n" + "=" * 60)
     print("  🎉 FINE-TUNING COMPLETE")
