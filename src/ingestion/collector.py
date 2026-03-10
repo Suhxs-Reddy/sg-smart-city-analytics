@@ -33,6 +33,7 @@ logger = logging.getLogger(__name__)
 # Configuration
 # =============================================================================
 
+
 def load_config(config_path: str = "configs/collection_config.yaml") -> dict:
     """Load collection configuration from YAML file."""
     with open(config_path) as f:
@@ -43,15 +44,14 @@ def load_config(config_path: str = "configs/collection_config.yaml") -> dict:
 # API Clients
 # =============================================================================
 
+
 class SingaporeAPIClient:
     """Async client for all Singapore data.gov.sg APIs."""
 
     def __init__(self, config: dict, session: aiohttp.ClientSession):
         self.config = config
         self.session = session
-        self.timeout = aiohttp.ClientTimeout(
-            total=config["collection"]["request_timeout_seconds"]
-        )
+        self.timeout = aiohttp.ClientTimeout(total=config["collection"]["request_timeout_seconds"])
         self.max_retries = config["collection"]["max_retries"]
         self.retry_delay = config["collection"]["retry_delay_seconds"]
 
@@ -69,12 +69,11 @@ class SingaporeAPIClient:
                         )
             except (TimeoutError, aiohttp.ClientError) as e:
                 logger.warning(
-                    f"Request failed for {url}: {e} "
-                    f"(attempt {attempt + 1}/{self.max_retries})"
+                    f"Request failed for {url}: {e} (attempt {attempt + 1}/{self.max_retries})"
                 )
 
             if attempt < self.max_retries - 1:
-                delay = self.retry_delay * (2 ** attempt)  # Exponential backoff
+                delay = self.retry_delay * (2**attempt)  # Exponential backoff
                 await asyncio.sleep(delay)
 
         logger.error(f"All {self.max_retries} retries failed for {url}")
@@ -88,14 +87,12 @@ class SingaporeAPIClient:
                     if resp.status == 200:
                         return await resp.read()
                     else:
-                        logger.warning(
-                            f"Image download returned {resp.status} for {url}"
-                        )
+                        logger.warning(f"Image download returned {resp.status} for {url}")
             except (TimeoutError, aiohttp.ClientError) as e:
                 logger.warning(f"Image download failed: {e}")
 
             if attempt < self.max_retries - 1:
-                delay = self.retry_delay * (2 ** attempt)
+                delay = self.retry_delay * (2**attempt)
                 await asyncio.sleep(delay)
 
         return None
@@ -129,6 +126,7 @@ class SingaporeAPIClient:
 # =============================================================================
 # Data Processors
 # =============================================================================
+
 
 def compute_image_hash(image_bytes: bytes) -> str:
     """Compute SHA-256 hash of image bytes for deduplication."""
@@ -210,8 +208,7 @@ def count_nearby_taxis(
         radius_deg = radius_km / 111.0
 
         for lng, lat in coordinates:
-            if (abs(lat - camera_lat) < radius_deg and
-                    abs(lng - camera_lng) < radius_deg):
+            if abs(lat - camera_lat) < radius_deg and abs(lng - camera_lng) < radius_deg:
                 count += 1
 
         return count
@@ -222,6 +219,7 @@ def count_nearby_taxis(
 # =============================================================================
 # Collector
 # =============================================================================
+
 
 class DataCollector:
     """Main data collection orchestrator."""
@@ -342,9 +340,7 @@ class DataCollector:
         cycle_start = time.time()
         collection_time = datetime.now(SGT)
 
-        logger.info(
-            f"Starting collection cycle at {collection_time.strftime('%H:%M:%S')}"
-        )
+        logger.info(f"Starting collection cycle at {collection_time.strftime('%H:%M:%S')}")
 
         # Fetch all data sources in parallel
         traffic_task = client.fetch_traffic_images()
@@ -353,10 +349,8 @@ class DataCollector:
         pm25_task = client.fetch_pm25()
         taxi_task = client.fetch_taxi_availability()
 
-        traffic_data, weather_data, forecast_data, pm25_data, taxi_data = (
-            await asyncio.gather(
-                traffic_task, weather_task, forecast_task, pm25_task, taxi_task
-            )
+        traffic_data, weather_data, forecast_data, pm25_data, taxi_data = await asyncio.gather(
+            traffic_task, weather_task, forecast_task, pm25_task, taxi_task
         )
 
         if not traffic_data:
@@ -387,8 +381,13 @@ class DataCollector:
         async def bounded_collect(camera: dict) -> bool:
             async with semaphore:
                 return await self._collect_single_camera(
-                    camera, client, weather_condition, temperature,
-                    pm25_readings, taxi_data, collection_time,
+                    camera,
+                    client,
+                    weather_condition,
+                    temperature,
+                    pm25_readings,
+                    taxi_data,
+                    collection_time,
                 )
 
         results = await asyncio.gather(
@@ -438,13 +437,15 @@ class DataCollector:
         print(f"  Cycles completed:    {self.stats['cycles_completed']}")
         print(f"  Total images saved:  {self.stats['images_saved']}")
         print(f"  Total images failed: {self.stats['images_failed']}")
-        print(f"  Last cycle cameras:  {self.stats['cameras_responding']} ok / "
-              f"{self.stats['cameras_failed']} failed")
+        print(
+            f"  Last cycle cameras:  {self.stats['cameras_responding']} ok / "
+            f"{self.stats['cameras_failed']} failed"
+        )
 
-        if self.stats['images_saved'] + self.stats['images_failed'] > 0:
+        if self.stats["images_saved"] + self.stats["images_failed"] > 0:
             success_rate = (
-                self.stats['images_saved'] /
-                (self.stats['images_saved'] + self.stats['images_failed'])
+                self.stats["images_saved"]
+                / (self.stats["images_saved"] + self.stats["images_failed"])
                 * 100
             )
             print(f"  Overall success rate: {success_rate:.1f}%")
@@ -455,6 +456,7 @@ class DataCollector:
 # =============================================================================
 # Main Entry Point
 # =============================================================================
+
 
 async def run_collector(
     config: dict,
@@ -475,21 +477,14 @@ async def run_collector(
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
         handlers=[
             logging.StreamHandler(),
-            *(
-                [logging.FileHandler(log_file)]
-                if log_file
-                else []
-            ),
+            *([logging.FileHandler(log_file)] if log_file else []),
         ],
     )
 
     if log_file:
         Path(log_file).parent.mkdir(parents=True, exist_ok=True)
 
-    logger.info(
-        f"Starting collector — duration: {duration_hours}h, "
-        f"interval: {interval_seconds}s"
-    )
+    logger.info(f"Starting collector — duration: {duration_hours}h, interval: {interval_seconds}s")
 
     async with aiohttp.ClientSession() as session:
         client = SingaporeAPIClient(config, session)

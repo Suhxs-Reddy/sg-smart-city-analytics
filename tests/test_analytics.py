@@ -11,7 +11,6 @@ Covers:
 - Drift alert generation
 """
 
-
 import numpy as np
 import pytest
 
@@ -28,6 +27,7 @@ from src.analytics.failure_analyzer import (
 # =============================================================================
 # Fixtures
 # =============================================================================
+
 
 @pytest.fixture
 def analyzer():
@@ -135,6 +135,7 @@ def low_res_detection():
 # =============================================================================
 # Failure Analyzer Tests
 # =============================================================================
+
 
 class TestFailureCategories:
     def test_normal_frame_no_failures(self, analyzer, normal_detection):
@@ -251,6 +252,7 @@ class TestCameraScorecard:
 # Drift Monitor Tests
 # =============================================================================
 
+
 class TestPSI:
     def test_identical_distributions(self):
         baseline = np.random.normal(128, 20, 1000)
@@ -292,9 +294,11 @@ class TestKSTest:
 class TestDriftMonitor:
     def test_baseline_setting(self, drift_monitor):
         baseline_data = [
-            {"mean_brightness": 130 + np.random.normal(0, 5),
-             "mean_confidence": 0.7 + np.random.normal(0, 0.05),
-             "num_vehicles": 5}
+            {
+                "mean_brightness": 130 + np.random.normal(0, 5),
+                "mean_confidence": 0.7 + np.random.normal(0, 0.05),
+                "num_vehicles": 5,
+            }
             for _ in range(100)
         ]
         drift_monitor.set_baseline(baseline_data)
@@ -305,18 +309,22 @@ class TestDriftMonitor:
     def test_no_drift_on_similar_data(self, drift_monitor):
         np.random.seed(42)
         baseline = [
-            {"mean_brightness": 130 + np.random.normal(0, 10),
-             "mean_confidence": 0.7 + np.random.normal(0, 0.05),
-             "num_vehicles": int(5 + np.random.normal(0, 2))}
+            {
+                "mean_brightness": 130 + np.random.normal(0, 10),
+                "mean_confidence": 0.7 + np.random.normal(0, 0.05),
+                "num_vehicles": int(5 + np.random.normal(0, 2)),
+            }
             for _ in range(200)
         ]
         drift_monitor.set_baseline(baseline)
 
         np.random.seed(43)  # Different seed but same distribution params
         current = [
-            {"mean_brightness": 130 + np.random.normal(0, 10),
-             "mean_confidence": 0.7 + np.random.normal(0, 0.05),
-             "num_vehicles": int(5 + np.random.normal(0, 2))}
+            {
+                "mean_brightness": 130 + np.random.normal(0, 10),
+                "mean_confidence": 0.7 + np.random.normal(0, 0.05),
+                "num_vehicles": int(5 + np.random.normal(0, 2)),
+            }
             for _ in range(100)
         ]
         alerts = drift_monitor.check_drift(current)
@@ -327,15 +335,13 @@ class TestDriftMonitor:
     def test_brightness_drift_detected(self, drift_monitor):
         np.random.seed(42)
         baseline = [
-            {"mean_brightness": 130, "mean_confidence": 0.7, "num_vehicles": 5}
-            for _ in range(200)
+            {"mean_brightness": 130, "mean_confidence": 0.7, "num_vehicles": 5} for _ in range(200)
         ]
         drift_monitor.set_baseline(baseline)
 
         # Sudden drop in brightness (night shift or camera degradation)
         dark_data = [
-            {"mean_brightness": 40, "mean_confidence": 0.4, "num_vehicles": 2}
-            for _ in range(50)
+            {"mean_brightness": 40, "mean_confidence": 0.4, "num_vehicles": 2} for _ in range(50)
         ]
         alerts = drift_monitor.check_drift(dark_data)
         data_alerts = [a for a in alerts if a.drift_type == "data"]

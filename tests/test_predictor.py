@@ -9,7 +9,6 @@ Covers:
 - Dataset shape validation
 """
 
-
 import numpy as np
 import torch
 
@@ -26,12 +25,13 @@ from src.analytics.predictor import (
 # LSTM Tests
 # =============================================================================
 
+
 class TestTrafficLSTM:
     def test_output_shape(self):
         model = TrafficLSTM(input_dim=6, hidden_dim=32)
         x = torch.randn(4, 30, 6)  # batch=4, window=30, features=6
         out = model(x)
-        assert out.shape == (4,)    # One prediction per sample
+        assert out.shape == (4,)  # One prediction per sample
 
     def test_single_sample(self):
         model = TrafficLSTM(input_dim=6, hidden_dim=32)
@@ -63,29 +63,34 @@ class TestTrafficLSTM:
 # Spatial-Temporal Model Tests
 # =============================================================================
 
+
 class TestSpatialTemporalPredictor:
     def test_output_shape(self):
         model = SpatialTemporalPredictor(
-            num_features=6, hidden_dim=32,
-            num_gat_layers=1, num_transformer_layers=1,
+            num_features=6,
+            hidden_dim=32,
+            num_gat_layers=1,
+            num_transformer_layers=1,
         )
-        x = torch.randn(2, 10, 5, 6)     # batch=2, window=10, nodes=5, features=6
-        adj = torch.ones(5, 5)             # Fully connected
+        x = torch.randn(2, 10, 5, 6)  # batch=2, window=10, nodes=5, features=6
+        adj = torch.ones(5, 5)  # Fully connected
         out = model(x, adj)
-        assert out.shape == (2, 5)         # Prediction per node
+        assert out.shape == (2, 5)  # Prediction per node
 
     def test_sparse_adjacency(self):
         """Model should work with sparse graph (not all connected)."""
         model = SpatialTemporalPredictor(
-            num_features=6, hidden_dim=32,
-            num_gat_layers=1, num_transformer_layers=1,
+            num_features=6,
+            hidden_dim=32,
+            num_gat_layers=1,
+            num_transformer_layers=1,
         )
         x = torch.randn(2, 10, 5, 6)
         # Only self-loops + sequential connections
         adj = torch.eye(5)
         for i in range(4):
-            adj[i, i+1] = 1
-            adj[i+1, i] = 1
+            adj[i, i + 1] = 1
+            adj[i + 1, i] = 1
 
         out = model(x, adj)
         assert out.shape == (2, 5)
@@ -93,8 +98,10 @@ class TestSpatialTemporalPredictor:
     def test_single_node_graph(self):
         """Edge case: single camera."""
         model = SpatialTemporalPredictor(
-            num_features=6, hidden_dim=32,
-            num_gat_layers=1, num_transformer_layers=1,
+            num_features=6,
+            hidden_dim=32,
+            num_gat_layers=1,
+            num_transformer_layers=1,
         )
         x = torch.randn(1, 10, 1, 6)
         adj = torch.ones(1, 1)
@@ -103,8 +110,10 @@ class TestSpatialTemporalPredictor:
 
     def test_gradient_flow(self):
         model = SpatialTemporalPredictor(
-            num_features=6, hidden_dim=32,
-            num_gat_layers=1, num_transformer_layers=1,
+            num_features=6,
+            hidden_dim=32,
+            num_gat_layers=1,
+            num_transformer_layers=1,
         )
         x = torch.randn(2, 5, 3, 6)
         adj = torch.ones(3, 3)
@@ -120,6 +129,7 @@ class TestSpatialTemporalPredictor:
 # =============================================================================
 # Dataset Tests
 # =============================================================================
+
 
 class TestTrafficTimeSeriesDataset:
     def test_length(self):
@@ -164,27 +174,48 @@ class TestSpatialTemporalDataset:
 # Feature Engineering Tests
 # =============================================================================
 
+
 class TestPrepareFeatures:
     def test_basic_output(self):
         records = [
-            {"num_vehicles": 5, "temperature_celsius": 30.0,
-             "pm25_reading": 15, "taxi_count_nearby_5km": 20,
-             "timestamp": "2026-03-08T14:00:00"},
-            {"num_vehicles": 8, "temperature_celsius": 31.0,
-             "pm25_reading": 18, "taxi_count_nearby_5km": 25,
-             "timestamp": "2026-03-08T15:00:00"},
+            {
+                "num_vehicles": 5,
+                "temperature_celsius": 30.0,
+                "pm25_reading": 15,
+                "taxi_count_nearby_5km": 20,
+                "timestamp": "2026-03-08T14:00:00",
+            },
+            {
+                "num_vehicles": 8,
+                "temperature_celsius": 31.0,
+                "pm25_reading": 18,
+                "taxi_count_nearby_5km": 25,
+                "timestamp": "2026-03-08T15:00:00",
+            },
         ]
         features = prepare_features(records)
         assert features.shape == (2, 6)  # 4 base + 2 cyclical
 
     def test_cyclical_encoding(self):
         """Hour 0 and hour 24 should have same encoding."""
-        records_0 = [{"num_vehicles": 5, "temperature_celsius": 30,
-                       "pm25_reading": 10, "taxi_count_nearby_5km": 10,
-                       "timestamp": "2026-03-08T00:00:00"}]
-        records_24 = [{"num_vehicles": 5, "temperature_celsius": 30,
-                        "pm25_reading": 10, "taxi_count_nearby_5km": 10,
-                        "timestamp": "2026-03-09T00:00:00"}]  # Midnight next day
+        records_0 = [
+            {
+                "num_vehicles": 5,
+                "temperature_celsius": 30,
+                "pm25_reading": 10,
+                "taxi_count_nearby_5km": 10,
+                "timestamp": "2026-03-08T00:00:00",
+            }
+        ]
+        records_24 = [
+            {
+                "num_vehicles": 5,
+                "temperature_celsius": 30,
+                "pm25_reading": 10,
+                "taxi_count_nearby_5km": 10,
+                "timestamp": "2026-03-09T00:00:00",
+            }
+        ]  # Midnight next day
 
         # Both should produce same sin/cos values (hour 0)
         f0 = prepare_features(records_0)
@@ -199,9 +230,13 @@ class TestPrepareFeatures:
     def test_normalization(self):
         """Output should be z-score normalized."""
         records = [
-            {"num_vehicles": v, "temperature_celsius": 30,
-             "pm25_reading": 10, "taxi_count_nearby_5km": 10,
-             "timestamp": "2026-03-08T12:00:00"}
+            {
+                "num_vehicles": v,
+                "temperature_celsius": 30,
+                "pm25_reading": 10,
+                "taxi_count_nearby_5km": 10,
+                "timestamp": "2026-03-08T12:00:00",
+            }
             for v in range(10)
         ]
         features = prepare_features(records)
@@ -235,6 +270,6 @@ class TestAdjacencyMatrix:
         assert adj[0, 1] == 0.0
 
     def test_symmetric(self):
-        cameras = {f"cam{i}": (1.3 + i*0.01, 103.8 + i*0.01) for i in range(5)}
+        cameras = {f"cam{i}": (1.3 + i * 0.01, 103.8 + i * 0.01) for i in range(5)}
         adj = build_adjacency_matrix(cameras, distance_threshold_km=3.0)
         np.testing.assert_array_equal(adj, adj.T)

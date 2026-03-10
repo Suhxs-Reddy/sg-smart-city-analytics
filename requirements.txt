@@ -55,3 +55,6 @@ mlflow>=2.9.0               # Experiment tracking
 pytest>=7.4.0               # Test framework
 pytest-asyncio>=0.23.0      # Async test support
 responses>=0.24.0           # Mock HTTP responses
+pymilvus>=2.3.0
+aiokafka>=0.8.0
+confluent-kafka>=2.3.0
