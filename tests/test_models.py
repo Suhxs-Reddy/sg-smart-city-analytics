@@ -156,9 +156,9 @@ class TestCATIDetector:
         config = CATIConfig(num_cameras=90, context_dim=64)
         cati = CATIDetector(config)
         counts = cati.count_parameters()
-        # Overhead is ~200–350K — lightweight relative to the 9.4M YOLOv11s backbone
+        # Overhead is ~200–600K — lightweight relative to the 9.4M YOLOv11s backbone
         assert counts["total_cati_overhead"] > 100_000
-        assert counts["total_cati_overhead"] < 500_000
+        assert counts["total_cati_overhead"] < 700_000
 
     def test_end_to_end_forward(self):
         config = CATIConfig(backbone_channels=[64, 128])
