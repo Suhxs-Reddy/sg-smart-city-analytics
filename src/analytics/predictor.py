@@ -334,7 +334,7 @@ class SpatialTemporalPredictor(nn.Module):
         Returns:
             Predictions (batch, num_nodes) — predicted vehicle count per camera
         """
-        B, T, N, D = x.shape
+        _B, T, N, _D = x.shape
 
         # Project input features
         x = self.input_proj(x)  # (B, T, N, hidden)

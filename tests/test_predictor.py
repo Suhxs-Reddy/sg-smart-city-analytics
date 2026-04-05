@@ -148,7 +148,7 @@ class TestTrafficTimeSeriesDataset:
         """Target should be vehicle count (column 0) at future timestep."""
         data = np.arange(600).reshape(100, 6).astype(np.float32)
         dataset = TrafficTimeSeriesDataset(data, window_size=10, horizon=5)
-        x, y = dataset[0]
+        _x, y = dataset[0]
         # y should be data[10 + 5 - 1, 0] = data[14, 0] = 14*6 = 84
         assert y.item() == 84.0
 

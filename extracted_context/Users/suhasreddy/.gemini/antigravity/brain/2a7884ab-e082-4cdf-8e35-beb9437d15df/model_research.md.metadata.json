@@ -1,5 +1,0 @@
-{
-  "artifactType": "ARTIFACT_TYPE_OTHER",
-  "summary": "Deep research document covering cutting-edge model architectures across 4 domains (detection, tracking, prediction, anomaly detection) for the Singapore Smart City project. Each section covers the SOTA landscape, identifies what's novel vs commodity, proposes a specific novel contribution the user can make, and assesses feasibility on Colab. Includes a recommended 'novel stack' that combines weather-adaptive YOLO modifications, graph-based tracking, spatial-temporal graph transformer prediction, and trajectory autoencoder anomaly detection.",
-  "updatedAt": "2026-03-08T22:36:46.202619Z"
-}

@@ -1,60 +1,117 @@
+# CATI Training Configuration
+# Context-Aware Traffic Intelligence — Singapore Smart City
+
 # =============================================================================
-# YOLOv11 Fine-Tuning Configuration for Singapore Traffic Detection
+# Model Architecture
 # =============================================================================
-# Run on Colab/Kaggle with: yolo train cfg=configs/training_config.yaml
-# Or use the Python API: model.train(**config)
+model:
+  name: "CATI-YOLOv11s"
+  backbone: "yolo11s.pt"           # Base YOLO weights (COCO pretrained)
+  num_cameras: 90                   # Singapore LTA camera network
+  context_dim: 64                   # Context embedding dimension
+  camera_embed_dim: 16              # Per-camera learned embedding
+  backbone_channels: [128, 256, 512]  # YOLOv11s P3/P4/P5 channels
+  num_classes: 6                    # car, motorcycle, bus, truck, person, bicycle
+  img_size: 640
 
-# Model selection
-# Start with yolo11s.pt (9.4M params, best accuracy/efficiency for T4 GPU)
-model: yolo11s.pt
+# =============================================================================
+# Training — Phase 1: Context Module (Backbone Frozen)
+# =============================================================================
+phase1:
+  epochs: 50
+  batch_size: 16
+  learning_rate: 1.0e-3
+  weight_decay: 1.0e-4
+  scheduler: "cosine"
+  warmup_epochs: 5
+  freeze_backbone: true
+  description: >
+    Train only the ContextEncoder + FiLMGenerator + FiLM layers.
+    YOLO backbone weights are frozen. This teaches the context pathway
+    to produce meaningful modulations based on environmental metadata.
 
-# Dataset — update path to point to your prepared dataset
-data: configs/traffic_dataset.yaml
+# =============================================================================
+# Training — Phase 2: End-to-End Fine-tuning
+# =============================================================================
+phase2:
+  epochs: 30
+  batch_size: 8                     # Smaller batch — full model in memory
+  learning_rate_backbone: 1.0e-4    # Lower LR for pretrained backbone
+  learning_rate_context: 1.0e-3     # Higher LR for context modules
+  weight_decay: 1.0e-4
+  scheduler: "cosine"
+  unfreeze_backbone: true
+  description: >
+    Jointly optimize YOLO backbone + context modules. Backbone uses
+    lower learning rate to preserve pretrained features.
 
-# Training hyperparameters
-epochs: 100               # Will early-stop if validation loss plateaus
-patience: 15              # Early stopping patience (epochs without improvement)
-batch: 16                 # Fits in T4 15GB VRAM with yolo11s
-imgsz: 640                # Standard YOLO input size — increase to 1280 for HD cameras
+# =============================================================================
+# Data
+# =============================================================================
+data:
+  train_dir: "data/features/train"
+  val_dir: "data/features/val"
+  test_dir: "data/features/test"
+  # External datasets for baseline training
+  ua_detrac:
+    url: "https://universe.roboflow.com/roboflow-100/vehicles-q0x2v"
+    classes: [car, bus, truck, van]
+  visdrone:
+    url: "https://github.com/VisDrone/VisDrone-Dataset"
+    classes: [car, bus, truck, pedestrian, van, motor]
 
-# Optimizer
-optimizer: AdamW
-lr0: 0.001                # Initial learning rate
-lrf: 0.01                 # Final learning rate as fraction of lr0
-momentum: 0.937
-weight_decay: 0.0005
-warmup_epochs: 3          # Warmup period
+# =============================================================================
+# Augmentation
+# =============================================================================
+augmentation:
+  # Context-specific augmentations
+  weather_simulation:
+    rain_overlay: true              # Synthetic rain drops
+    fog_overlay: true               # Gaussian blur + brightness
+    night_darkening: true           # Reduce brightness by 60-80%
+  # Standard YOLO augmentations
+  mosaic: 0.5
+  mixup: 0.1
+  hsv_h: 0.015
+  hsv_s: 0.7
+  hsv_v: 0.4
+  flipud: 0.0                      # No vertical flip (cameras are fixed)
+  fliplr: 0.5
 
-# Augmentation — critical for traffic camera domain adaptation
-# Aggressive augmentation because Singapore cameras have diverse conditions
-hsv_h: 0.015              # Hue shift
-hsv_s: 0.7                # Saturation shift (handle rainy/foggy desaturation)
-hsv_v: 0.4                # Value/brightness shift (handle night vs day)
-degrees: 0.0              # No rotation (cameras are fixed)
-translate: 0.1            # Small translation
-scale: 0.5                # Scale augmentation (vehicles at various distances)
-shear: 0.0                # No shear (fixed camera angle)
-perspective: 0.0          # No perspective change
-flipud: 0.0               # No vertical flip (cars don't appear upside down)
-fliplr: 0.5               # Horizontal flip is fine
-mosaic: 1.0               # Mosaic augmentation — great for multi-scale
-mixup: 0.1                # Light mixup
+# =============================================================================
+# MLflow Experiment Tracking
+# =============================================================================
+mlflow:
+  experiment_name: "sg-cati-training"
+  tracking_uri: "mlruns"
+  log_every_n_epochs: 5
+  log_model_artifacts: true
 
-# Regularization
-dropout: 0.0              # Model-level dropout (YOLO handles this internally)
-close_mosaic: 10          # Disable mosaic for last 10 epochs (cleaner convergence)
+# =============================================================================
+# Evaluation
+# =============================================================================
+evaluation:
+  metrics: [mAP50, mAP50-95, precision, recall]
+  # Condition-stratified evaluation
+  stratify_by:
+    - weather_condition
+    - resolution_bucket
+    - time_of_day
+  benchmarks:
+    - name: "YOLOv11s (COCO baseline)"
+      weights: "yolo11s.pt"
+    - name: "YOLOv11s (UA-DETRAC fine-tuned)"
+      weights: "models/yolo11s_traffic.pt"
+    - name: "CATI (ours)"
+      weights: "models/cati_latest.pt"
 
-# Hardware
-device: 0                 # GPU 0 (Colab T4)
-workers: 2                # DataLoader workers (Colab has ~2 CPU cores)
-amp: true                 # Mixed precision (faster on T4)
-
-# Saving
-project: runs/train       # Output directory
-name: sg_traffic_v1       # Run name
-save_period: 10           # Save checkpoint every 10 epochs
-exist_ok: true            # Overwrite existing run
-
-# Logging
-verbose: true
-plots: true               # Generate training plots
+# =============================================================================
+# Export
+# =============================================================================
+export:
+  formats: [onnx, torchscript]
+  opset: 17                         # ONNX opset version
+  simplify: true
+  quantize:
+    int8: true                      # TensorRT INT8 for edge deployment
+    calibration_images: 200

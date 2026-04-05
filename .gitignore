@@ -14,17 +14,16 @@ venv/
 env/
 
 # Model weights
-*.pt
-*.pth
-*.onnx
-*.engine
-*.trt
-models/*.bin
+models/*.pt
+models/*.pth
+models/*.onnx
+models/*.engine
+models/*.trt
 
 # Data
-data/raw/*
+data/raw/
 data/processed/*
-!data/raw/.gitkeep
+data/dataset/
 !data/processed/.gitkeep
 
 # IDE
@@ -37,24 +36,10 @@ data/processed/*
 .DS_Store
 Thumbs.db
 
-# Environment variables
-.env
-.env.local
-
 # Logs
 *.log
 logs/
 
-# Docker
-pg_data/
-minio_data/
-mlflow_data/
-
-# Jupyter
-.ipynb_checkpoints/
-
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-.env.deployment
+# MLflow
+mlruns/
+mlartifacts/
