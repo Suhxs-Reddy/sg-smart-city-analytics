@@ -127,12 +127,24 @@ class CATIDataset(Dataset):
         }
 
         # ----- Cached backbone features -----
+        # Expected spatial dims for YOLOv11s at img_size=640 (square input):
+        #   P3 (layer 4): 80×80,  P4 (layer 6): 40×40,  P5 (layer 9): 20×20
+        _EXPECTED_SPATIAL = [(80, 80), (40, 40), (20, 20)]
+
         feat_path = meta_path.with_suffix(".pt")
         features: list[torch.Tensor] | None = None
         if feat_path.exists():
             try:
                 # Saved as FP16 list; convert to FP32 for training
-                features = [f.float() for f in torch.load(feat_path, weights_only=True)]
+                loaded = [f.float() for f in torch.load(feat_path, weights_only=True)]
+                # Resize to canonical spatial dims if extraction used letterboxing
+                features = []
+                for feat, (th, tw) in zip(loaded, _EXPECTED_SPATIAL, strict=False):
+                    if feat.shape[-2:] != (th, tw):
+                        feat = nn.functional.interpolate(
+                            feat, size=(th, tw), mode="bilinear", align_corners=False
+                        )
+                    features.append(feat)
             except Exception as e:
                 logger.warning(f"Failed to load features from {feat_path}: {e}")
 
