@@ -42,7 +42,9 @@ from pathlib import Path
 from typing import ClassVar
 
 import click
+import numpy as np
 import torch
+from PIL import Image
 
 logger = logging.getLogger(__name__)
 
@@ -160,8 +162,17 @@ class YOLOFeatureExtractor:
         """
         self._captured.clear()
 
+        # Force square resize so all feature maps have identical spatial dims.
+        # YOLO letterboxes by default (maintains aspect ratio), which produces
+        # variable-size feature maps that can't be batched in the collate fn.
+        img = np.array(
+            Image.open(image_path).convert("RGB").resize(
+                (self.img_size, self.img_size), Image.BILINEAR
+            )
+        )
+
         results = self.yolo.predict(
-            image_path,
+            img,
             imgsz=self.img_size,
             verbose=False,
             save=False,
