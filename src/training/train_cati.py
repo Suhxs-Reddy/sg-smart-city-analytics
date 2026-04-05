@@ -556,6 +556,7 @@ class CATITrainer:
         checkpoint = {
             "epoch": epoch,
             "model_state_dict": self.cati.state_dict(),
+            "prediction_head_state_dict": self.prediction_head.state_dict(),
             "optimizer_state_dict": self.optimizer.state_dict(),
             "val_loss": val_loss,
             "config": {k: v for k, v in self.config.__dict__.items() if not callable(v)},
@@ -582,6 +583,8 @@ class CATITrainer:
         """Load training checkpoint. Returns the epoch number."""
         checkpoint = torch.load(path, map_location=self.device, weights_only=False)
         self.cati.load_state_dict(checkpoint["model_state_dict"])
+        if "prediction_head_state_dict" in checkpoint:
+            self.prediction_head.load_state_dict(checkpoint["prediction_head_state_dict"])
         self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
         if self.ema is not None and "ema_state_dict" in checkpoint:
