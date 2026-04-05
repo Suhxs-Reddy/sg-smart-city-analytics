@@ -36,6 +36,8 @@ Usage:
 
 import json
 import logging
+import math as _math
+from collections import defaultdict
 from pathlib import Path
 from typing import ClassVar
 
@@ -109,7 +111,7 @@ class YOLOFeatureExtractor:
             def _make_hook(idx: int):
                 def hook(module, _input, output):
                     # Some YOLO layers return tuples; we want the tensor output.
-                    feat = output[0] if isinstance(output, (tuple, list)) else output
+                    feat = output[0] if isinstance(output, tuple | list) else output
                     if isinstance(feat, torch.Tensor):
                         self._captured[idx] = feat.detach().cpu()
 
@@ -281,10 +283,33 @@ class FeatureExtractor:
             logger.warning(f"No image+metadata pairs found in {raw_dir}")
             return {"train": 0, "val": 0, "test": 0}
 
-        if max_samples:
-            pairs = pairs[:max_samples]
-
         logger.info(f"Found {len(pairs)} image+metadata pairs in {raw_dir}")
+
+        if max_samples and len(pairs) > max_samples:
+            # Stratified sampling by camera: sample proportionally from each camera
+            # so all cameras are represented in the extracted subset.
+            by_camera: dict = defaultdict(list)
+            for p in pairs:
+                by_camera[p.get("camera_id", "unknown")].append(p)
+
+            num_cameras = len(by_camera)
+            per_camera = max(_math.ceil(max_samples / num_cameras), 1)
+
+            sampled: list = []
+            for cam_pairs in by_camera.values():
+                # Sort each camera's images by time, take evenly-spaced samples
+                cam_pairs.sort(key=lambda p: p.get("timestamp", ""))
+                if len(cam_pairs) <= per_camera:
+                    sampled.extend(cam_pairs)
+                else:
+                    step = len(cam_pairs) / per_camera
+                    sampled.extend(cam_pairs[int(i * step)] for i in range(per_camera))
+
+            pairs = sampled[:max_samples]  # trim any rounding overshoot
+            logger.info(
+                f"Stratified sampling: {max_samples} from {num_cameras} cameras "
+                f"(~{per_camera}/camera)"
+            )
 
         # Temporal sort for proper train/val/test split (avoids data leakage)
         pairs.sort(key=lambda p: p.get("timestamp", ""))
