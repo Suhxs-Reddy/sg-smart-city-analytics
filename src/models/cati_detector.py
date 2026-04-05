@@ -333,6 +333,105 @@ class CATIBackboneWrapper:
                 return torch.device("mps")
         return torch.device("cpu") if device == "auto" else torch.device(device)
 
+    def _build_context_tensors(
+        self,
+        camera_id: int,
+        weather: str,
+        temperature: float,
+        pm25: float,
+        hour: float,
+        resolution: tuple[int, int],
+        camera_lat: float | None,
+        camera_lon: float | None,
+    ) -> dict:
+        """Convert scalar context values to device tensors (batch size 1)."""
+        weather_id = ContextEncoder.weather_to_id(weather)
+        resolution_id = ContextEncoder.resolution_to_id(*resolution)
+        ctx = {
+            "weather_id": torch.tensor([weather_id], dtype=torch.long, device=self.device),
+            "temperature": torch.tensor([temperature], dtype=torch.float32, device=self.device),
+            "pm25": torch.tensor([pm25], dtype=torch.float32, device=self.device),
+            "hour": torch.tensor([hour], dtype=torch.float32, device=self.device),
+            "camera_id": torch.tensor([camera_id], dtype=torch.long, device=self.device),
+            "resolution_id": torch.tensor([resolution_id], dtype=torch.long, device=self.device),
+        }
+        if camera_lat is not None and camera_lon is not None:
+            ctx["camera_lat"] = torch.tensor([camera_lat], dtype=torch.float32, device=self.device)
+            ctx["camera_lon"] = torch.tensor([camera_lon], dtype=torch.float32, device=self.device)
+        return ctx
+
+    def register_film_hooks(
+        self,
+        model_variant: str = "yolo11s",
+    ) -> list:
+        """Register forward hooks that apply FiLM conditioning during YOLO forward pass.
+
+        Hooks intercept P3/P4/P5 feature maps immediately after each backbone
+        layer produces them, apply FiLM modulation in-place, and return the
+        conditioned tensor so the rest of the network sees modulated features.
+
+        The CATI context must be set via `self._active_context` before calling
+        `yolo.predict()` — use `predict()` which handles this automatically.
+
+        Args:
+            model_variant: YOLO variant key for layer index lookup.
+
+        Returns:
+            List of hook handles (call handle.remove() to deregister).
+        """
+        if self.yolo is None:
+            raise RuntimeError("YOLO model not loaded")
+
+        layer_indices = self.HOOK_LAYER_NAMES.get(model_variant, [4, 6, 9])
+        backbone = self.yolo.model.model
+        handles = []
+
+        # Pre-compute FiLM params once per image and cache them
+        self._film_params_cache: list[tuple[torch.Tensor, torch.Tensor]] | None = None
+
+        for stage_idx, layer_idx in enumerate(layer_indices):
+            def _make_hook(s_idx: int):
+                def hook(
+                    _module: nn.Module,
+                    _input: tuple,
+                    output: torch.Tensor,
+                ) -> torch.Tensor:
+                    ctx = getattr(self, "_active_context", None)
+                    if ctx is None:
+                        return output
+
+                    # Extract feature tensor (some layers return tuples)
+                    feat = output[0] if isinstance(output, tuple | list) else output
+                    if not isinstance(feat, torch.Tensor):
+                        return output
+
+                    # Move feature to CATI device for conditioning
+                    feat = feat.to(self.device)
+
+                    # Compute FiLM params on first stage, reuse for rest
+                    if s_idx == 0 or self._film_params_cache is None:
+                        with torch.no_grad():
+                            context = self.cati.encode_context(**ctx)
+                            self._film_params_cache = self.cati.get_film_params(context)
+                        self._active_context_vec = context
+
+                    gamma, beta = self._film_params_cache[s_idx]
+                    with torch.no_grad():
+                        modulated = self.cati.film_layers[s_idx](
+                            feat, gamma, beta, self._active_context_vec
+                        )
+
+                    return modulated
+
+                return hook
+
+            handle = backbone[layer_idx].register_forward_hook(_make_hook(stage_idx))
+            handles.append(handle)
+            logger.debug(f"FiLM hook registered on backbone layer {layer_idx} (P{stage_idx + 3})")
+
+        logger.info(f"Registered {len(handles)} FiLM hooks on {model_variant} backbone")
+        return handles
+
     def predict(
         self,
         image_path: str,
@@ -344,28 +443,60 @@ class CATIBackboneWrapper:
         resolution: tuple[int, int] = (1920, 1080),
         camera_lat: float | None = None,
         camera_lon: float | None = None,
+        use_film: bool = True,
     ) -> dict:
         """Run CATI-enhanced detection on a single image.
 
-        TODO: Wire FiLM conditioning into the live YOLO forward pass via hooks.
-        Currently runs standard YOLO detection without FiLM modulation.
-        Phase 2 training will complete this integration.
+        When use_film=True (default), FiLM conditioning is applied to the YOLO
+        backbone via forward hooks before the detection head runs.
+
+        Args:
+            image_path: Path to input image.
+            camera_id: LTA camera index.
+            weather: Weather condition string (see WEATHER_CONDITIONS).
+            temperature: Air temperature in Celsius.
+            pm25: PM2.5 concentration in ug/m3.
+            hour: Hour of day [0, 24).
+            resolution: (width, height) of the source camera.
+            camera_lat: Optional GPS latitude.
+            camera_lon: Optional GPS longitude.
+            use_film: Apply FiLM conditioning (requires trained CATI weights).
+
+        Returns:
+            Detection results dict with boxes, context, and metadata.
         """
         if self.yolo is None:
             raise RuntimeError("YOLO model not loaded")
 
-        results = self.yolo.predict(
-            image_path,
-            conf=self.config.conf_threshold,
-            iou=self.config.iou_threshold,
-            imgsz=self.config.img_size,
-            verbose=False,
-        )
+        weather_id = ContextEncoder.weather_to_id(weather)
+        resolution_id = ContextEncoder.resolution_to_id(*resolution)
+
+        handles: list = []
+        if use_film:
+            self._active_context = self._build_context_tensors(
+                camera_id, weather, temperature, pm25, hour,
+                resolution, camera_lat, camera_lon,
+            )
+            self._film_params_cache = None
+            handles = self.register_film_hooks()
+
+        try:
+            self.cati.eval()
+            results = self.yolo.predict(
+                image_path,
+                conf=self.config.conf_threshold,
+                iou=self.config.iou_threshold,
+                imgsz=self.config.img_size,
+                verbose=False,
+            )
+        finally:
+            for h in handles:
+                h.remove()
+            self._active_context = None
+            self._film_params_cache = None
 
         result = results[0]
         boxes = result.boxes
-        weather_id = ContextEncoder.weather_to_id(weather)
-        resolution_id = ContextEncoder.resolution_to_id(*resolution)
 
         detections = []
         if boxes is not None:
@@ -382,6 +513,7 @@ class CATIBackboneWrapper:
             "camera_id": camera_id,
             "num_detections": len(detections),
             "detections": detections,
+            "film_conditioning": use_film,
             "context": {
                 "weather": weather,
                 "weather_id": weather_id,
