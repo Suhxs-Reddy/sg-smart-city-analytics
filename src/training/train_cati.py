@@ -31,6 +31,7 @@ Usage:
 
 import json
 import logging
+import math
 import time
 from pathlib import Path
 
@@ -41,7 +42,7 @@ import yaml
 from torch.utils.data import DataLoader, Dataset
 
 from src.models.cati_detector import CATIConfig, CATIDetector, EMAModel
-from src.models.context_encoder import ContextEncoder
+from src.models.context_encoder import WEATHER_CONDITIONS, ContextEncoder
 
 logger = logging.getLogger(__name__)
 
@@ -181,6 +182,103 @@ def cati_collate(batch: list) -> tuple:
 
 
 # ---------------------------------------------------------------------------
+# Context Prediction Head (Phase 1 training signal)
+# ---------------------------------------------------------------------------
+
+
+class ContextPredictionHead(nn.Module):
+    """Predicts context variables from FiLM-conditioned backbone features.
+
+    Phase 1 training signal: forces the FiLM conditioning to encode meaningful
+    context information rather than collapsing to identity (the failure mode of
+    simple MSE(modulated, original) loss where the gate just closes to zero).
+
+    Global-average-pools each FiLM stage, concatenates, then predicts:
+        - Weather class   (cross-entropy, 11 classes)
+        - Hour sin/cos    (MSE with cyclical encoding)
+        - Camera identity (cross-entropy, up to num_cameras)
+        - Temperature     (MSE, normalized to Singapore range)
+
+    Args:
+        feature_dims: Channel dims at each backbone stage, e.g. [256, 256, 512].
+        num_cameras: Number of unique cameras in the network.
+        num_weather_classes: Number of weather condition classes.
+    """
+
+    def __init__(
+        self,
+        feature_dims: list[int],
+        num_cameras: int = 90,
+        num_weather_classes: int = len(WEATHER_CONDITIONS),
+    ):
+        super().__init__()
+        total_dim = sum(feature_dims)
+        hidden = min(512, total_dim // 2)
+
+        self.proj = nn.Sequential(
+            nn.Linear(total_dim, hidden),
+            nn.GELU(),
+            nn.LayerNorm(hidden),
+            nn.Dropout(0.1),
+        )
+        self.weather_head = nn.Linear(hidden, num_weather_classes)
+        self.hour_head = nn.Linear(hidden, 2)     # sin/cos
+        self.camera_head = nn.Linear(hidden, num_cameras)
+        self.temp_head = nn.Linear(hidden, 1)     # normalized temperature
+
+    def forward(self, features: list[torch.Tensor]) -> dict[str, torch.Tensor]:
+        """Pool all stages and predict context variables.
+
+        Args:
+            features: List of (B, C, H, W) conditioned feature maps.
+
+        Returns:
+            Dict with keys: weather, hour, camera, temp.
+        """
+        pooled = [f.mean(dim=(-2, -1)) for f in features]  # [(B, C), ...]
+        combined = torch.cat(pooled, dim=-1)  # (B, total_dim)
+        h = self.proj(combined)
+        return {
+            "weather": self.weather_head(h),
+            "hour": self.hour_head(h),
+            "camera": self.camera_head(h),
+            "temp": self.temp_head(h).squeeze(-1),
+        }
+
+    def compute_loss(
+        self,
+        preds: dict[str, torch.Tensor],
+        ctx: dict[str, torch.Tensor],
+    ) -> torch.Tensor:
+        """Compute combined context prediction loss.
+
+        Args:
+            preds: Output of forward().
+            ctx: Context tensors from the dataloader batch.
+
+        Returns:
+            Scalar loss tensor.
+        """
+        hour = ctx["hour"].float()
+        hour_target = torch.stack(
+            [
+                torch.sin(2 * math.pi * hour / 24),
+                torch.cos(2 * math.pi * hour / 24),
+            ],
+            dim=-1,
+        )
+        temp_target = (ctx["temperature"].float() - 29.0) / 5.0
+
+        weather_loss = nn.functional.cross_entropy(preds["weather"], ctx["weather_id"].long())
+        hour_loss = nn.functional.mse_loss(preds["hour"], hour_target)
+        camera_loss = nn.functional.cross_entropy(preds["camera"], ctx["camera_id"].long())
+        temp_loss = nn.functional.mse_loss(preds["temp"], temp_target)
+
+        # Weight camera lower — it has many classes and is harder to predict
+        return weather_loss + hour_loss + 0.5 * camera_loss + temp_loss
+
+
+# ---------------------------------------------------------------------------
 # Trainer
 # ---------------------------------------------------------------------------
 
@@ -221,6 +319,12 @@ class CATITrainer:
         # EMA model for stable inference
         self.ema = EMAModel(self.cati, decay=config.ema_decay) if config.ema_decay > 0 else None
 
+        # Context prediction head for Phase 1 self-supervised training signal
+        self.prediction_head = ContextPredictionHead(
+            feature_dims=config.backbone_channels,
+            num_cameras=config.num_cameras,
+        ).to(self.device)
+
         # Optimizer with per-parameter-group learning rates
         self.optimizer = self._build_optimizer(learning_rate, weight_decay)
 
@@ -229,9 +333,6 @@ class CATITrainer:
 
         # AMP scaler
         self.scaler = torch.amp.GradScaler() if self.use_amp else None
-
-        # Loss function
-        self.criterion = nn.MSELoss()
 
         # Tracking
         self.best_val_loss = float("inf")
@@ -273,6 +374,11 @@ class CATITrainer:
                 "params": list(self.cati.film_layers.parameters()),
                 "lr": learning_rate * 0.5,
                 "name": "film_layers",
+            },
+            {
+                "params": list(self.prediction_head.parameters()),
+                "lr": learning_rate,
+                "name": "prediction_head",
             },
         ]
         return torch.optim.AdamW(param_groups, weight_decay=weight_decay)
@@ -332,15 +438,12 @@ class CATITrainer:
                     ctx.get("camera_lon"),
                 )
 
-                # Phase 1 loss: modulation magnitude regularization.
-                # We want the context encoder to learn meaningful (non-trivial)
-                # modulations while the adaptive gate prevents over-conditioning.
-                # The adaptive gate α initializes near 0, so early loss is near 0
-                # and grows as the model learns to apply conditioning selectively.
-                loss = sum(
-                    nn.functional.mse_loss(mod, orig.detach())
-                    for mod, orig in zip(modulated, features, strict=True)
-                )
+                # Phase 1 loss: context prediction from conditioned features.
+                # Predicts weather/hour/camera/temp from FiLM-conditioned features.
+                # This forces the gate to open and the context encoder to learn
+                # meaningful modulations — avoids the gate-closes-to-zero failure mode.
+                preds = self.prediction_head(modulated)
+                loss = self.prediction_head.compute_loss(preds, ctx)
                 loss = loss / self.grad_accum_steps
 
             if self.scaler is not None:
@@ -411,10 +514,8 @@ class CATITrainer:
                 ctx.get("camera_lon"),
             )
 
-            loss = sum(
-                nn.functional.mse_loss(mod, orig)
-                for mod, orig in zip(modulated, features, strict=True)
-            )
+            preds = self.prediction_head(modulated)
+            loss = self.prediction_head.compute_loss(preds, ctx)
             total_loss += loss.item()
             num_batches += 1
 
