@@ -1,264 +1,148 @@
-# 🇸🇬 Singapore Smart City Analytics
+# Singapore Smart City Traffic Analytics
 
-**Production-grade ML platform processing all 90 Singapore LTA traffic cameras**
+**CATI — Context-Aware Traffic Intelligence**
 
-Real-time computer vision, multi-object tracking, and predictive analytics for urban traffic intelligence. Built end-to-end with MLflow experiment tracking, Docker containerization, and CI/CD automation.
+A novel traffic detection and analytics platform built on Singapore's 90 LTA traffic cameras. The core contribution is **CATI**, a FiLM-conditioned YOLOv11 detector that adapts to environmental conditions (weather, time-of-day, camera viewpoint) using real-time metadata from Singapore's national APIs.
 
-[![CI Pipeline](https://github.com/Suhxs-Reddy/sg-smart-city-analytics/actions/workflows/ci.yml/badge.svg)](https://github.com/Suhxs-Reddy/sg-smart-city-analytics/actions)
-[![Deploy to Azure](https://github.com/Suhxs-Reddy/sg-smart-city-analytics/actions/workflows/deploy-azure.yml/badge.svg)](https://github.com/Suhxs-Reddy/sg-smart-city-analytics/actions)
-
----
-
-## Why This Matters
-
-| Challenge | Solution | Impact |
-|-----------|----------|--------|
-| **Singapore has 90 LTA cameras** but no real-time analytics | End-to-end ML pipeline: detection → tracking → prediction | Enable proactive traffic management |
-| **COCO models get 78% mAP** on traffic (not domain-adapted) | Fine-tuned YOLOv11s: **target 92% mAP** | 18% accuracy improvement |
-| **No camera reliability monitoring** | 6-category failure taxonomy + per-camera scorecards | Identify degraded cameras before they fail |
-| **Point-in-time analysis only** | Spatial-temporal graph model for 15-min forecasting | Predict congestion before it happens |
-| **Research code isn't production-ready** | Docker + CI/CD + MLflow + 80 tests | Deploy-ready from day one |
+![Python](https://img.shields.io/badge/python-3.11+-blue)
+![PyTorch](https://img.shields.io/badge/pytorch-2.1+-red)
+![License](https://img.shields.io/badge/license-MIT-green)
+![CI](https://img.shields.io/github/actions/workflow/status/Suhxs-Reddy/sg-smart-city-analytics/ci.yml?label=CI)
 
 ---
 
-## Overview
+## The Problem
 
-This system ingests live traffic camera feeds from Singapore's Land Transport Authority (LTA) via the [data.gov.sg](https://data.gov.sg) API and applies a multi-stage ML pipeline to extract actionable urban insights:
+Generic object detectors (YOLO, Faster R-CNN) treat every frame identically — a clear daytime highway image and a rain-soaked night image from a 320x240 camera receive the exact same feature extraction. But in Singapore's fixed-camera traffic network, we **know things at inference time** that generic detectors ignore:
 
-1. **Detection** — Fine-tuned YOLOv11s for Singapore traffic conditions (target: 92% mAP)
-2. **Tracking** — BoT-SORT with OSNet Re-ID for persistent vehicle identity
-3. **Prediction** — Spatial-Temporal Graph Transformer for multi-camera congestion forecasting
-4. **Failure Analysis** — 6-category failure taxonomy with per-camera reliability scorecards
-5. **Drift Monitoring** — Statistical (PSI, KS-test) model health monitoring
-6. **Multi-Modal Fusion** — Traffic × Weather × Taxi × Air Quality correlation
+| Signal | Source | Why It Matters |
+|--------|--------|----------------|
+| Camera ID | Fixed deployment | Same viewpoint always — learnable spatial priors |
+| Weather | data.gov.sg API | Rain/haze degrades features differently than clear sky |
+| Time | Timestamp | Lighting, shadows, traffic density vary |
+| Resolution | Camera spec | 78 cameras @ 1080p, 11 @ 320x240 |
+| PM2.5 | Air quality API | Haze reduces visibility and contrast |
+
+**No published traffic detector uses environmental metadata to modulate the detection backbone.**
 
 ## Architecture
 
-### Cloud Infrastructure ($8/month total)
+CATI injects **Feature-wise Linear Modulation (FiLM)** layers into YOLOv11's backbone. FiLM ([Perez et al., AAAI 2018](https://arxiv.org/abs/1709.07871)) learns channel-wise affine transforms conditioned on an external signal:
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                   PRODUCTION DEPLOYMENT ARCHITECTURE                        │
-└─────────────────────────────────────────────────────────────────────────────┘
-
- DATA COLLECTION                    MODEL TRAINING                 PRODUCTION
- (Google Colab — Free)             (Kaggle — Free)                (Azure — $8/mo)
-
- ┌──────────────────┐              ┌──────────────────┐          ┌───────────────────┐
- │  Colab Notebook  │              │ Kaggle Notebook  │          │   Azure B1s VM    │
- │  ───────────────│              │  ───────────────│          │  ────────────────│
- │  • 90 cameras    │   Model      │  • T4 GPU        │  best.pt │  Docker Compose: │
- │  • Every 60s     │───Trained───▶│  • YOLOv11s      │─────────▶│  • API (FastAPI) │
- │  • Multi-modal   │              │  • MLflow        │          │  • Detection     │
- │  • → Drive       │              │  • 92% mAP       │          │  • Tracking      │
- └────────┬─────────┘              └──────────────────┘          │  • Analytics     │
-          │                                                       └────────┬──────────┘
-          │ Raw data accumulated                                          │
-          ▼                                                                │
- ┌──────────────────┐                                                     │
- │  Google Drive    │                                            HTTPS    │
- │  • 50GB free     │                                                     ▼
- │  • Persistent    │              ┌────────────────────────────────────────────┐
- └──────────────────┘              │         React Dashboard (Vercel)            │
-                                   │  • Leaflet map (90 camera markers)         │
-  GitHub Actions CI/CD             │  • Real-time congestion heatmap            │
-  ───────────────────             │  • Drift/failure alerts                    │
-  ✅ Test on push                  │  Free hosting                              │
-  ✅ Auto-deploy to Azure          └────────────────────────────────────────────┘
-  ✅ Security scans
-
- TOTAL COST: ~$8/month (Azure VM only, all else free)
+feature_out = γ ⊙ feature_in + β
 ```
 
-### ML Pipeline (Runs on Azure VM)
+where `γ` (scale) and `β` (shift) are predicted by a context encoder that processes environmental metadata.
 
 ```
-┌────────────────────────────────────────────────────────────────────────────┐
-│                         SINGAPORE SMART CITY PIPELINE                      │
-├────────────────────────────────────────────────────────────────────────────┤
-│                                                                            │
-│  ┌──────────────┐     ┌──────────────┐     ┌──────────────────────┐       │
-│  │   COLLECT     │────▶│   DETECT     │────▶│      TRACK           │       │
-│  │ 90 cameras    │     │ YOLOv11s     │     │ BoT-SORT + OSNet    │       │
-│  │ + weather     │     │ 6 classes    │     │ Re-ID               │       │
-│  │ + taxi GPS    │     │ auto-label   │     │ trajectories        │       │
-│  │ + PM2.5       │     │              │     │ congestion score    │       │
-│  └──────────────┘     └──────────────┘     └──────────┬───────────┘       │
-│                                                        │                   │
-│                                                        ▼                   │
-│  ┌──────────────┐     ┌──────────────┐     ┌──────────────────────┐       │
-│  │  DASHBOARD   │◀────│    API       │◀────│     ANALYZE          │       │
-│  │ Leaflet map  │     │ FastAPI      │     │ Failure analysis     │       │
-│  │ heatmap      │     │ 10 endpoints │     │ Drift detection      │       │
-│  │ alerts       │     │ WebSocket    │     │ LSTM + Graph predict │       │
-│  └──────────────┘     └──────────────┘     └──────────────────────┘       │
-│                                                                            │
-└────────────────────────────────────────────────────────────────────────────┘
+CONTEXT BRANCH                    VISION BRANCH
+
+┌────────────────┐               ┌──────────────┐
+│ Context Vector │               │ Camera Frame │
+│ • weather_id   │               │ (RGB Image)  │
+│ • temperature  │               └──────┬───────┘
+│ • hour_sin/cos │                      │
+│ • camera_id    │               ┌──────▼───────┐
+│ • resolution   │               │ YOLO Backbone│
+│ • pm25         │               │ P3 → FiLM(γ₁,β₁)
+└───────┬────────┘               │ P4 → FiLM(γ₂,β₂)
+        │                        │ P5 → FiLM(γ₃,β₃)
+ ┌──────▼───────┐               └──────┬───────┘
+ │ContextEncoder│                      │
+ │ (MLP → γ,β)  │──── FiLM ──────────>│
+ └──────────────┘               ┌──────▼───────┐
+                                │ Detection    │
+                                │ Head (6 cls) │
+                                └──────────────┘
 ```
 
-## Pipeline
+### Key Design Decisions
 
-Run the full pipeline or individual stages:
+- **FiLM init = identity**: γ=1, β=0 at initialization, so the model starts equivalent to vanilla YOLO
+- **Per-camera embeddings**: Each of 90 cameras gets a learned 16-dim embedding, capturing viewpoint priors
+- **Cyclical time encoding**: sin/cos encoding avoids midnight discontinuity
+- **~130K overhead**: CATI adds ~130K parameters to YOLO's 9.4M — 1.4% overhead, negligible inference cost
 
-```bash
-# Full pipeline (detect → track → analyze → label → format)
-python -m src.pipeline --mode full --model models/yolo11s_traffic.pt
+### Training Strategy
 
-# Individual stages
-python -m src.pipeline --mode detect --input data/raw/2026-03-08
-python -m src.pipeline --mode track
-python -m src.pipeline --mode analyze
+**Phase 1 — Context Module Only** (backbone frozen):
+- Train ContextEncoder + FiLM layers only
+- YOLO backbone weights from COCO pretrain stay frozen
+- LR: 1e-3, 50 epochs
 
-# Data collection (runs as long-running service on Azure/Colab)
-python -m src.ingestion.collector --duration 24 --interval 60
-```
-
-## Data Sources
-
-| Source | API | Refresh | Status |
-|---|---|---|---|
-| Traffic Cameras (90) | `data.gov.sg/v1/transport/traffic-images` | 20s | ✅ Verified |
-| Taxi Availability (~1,450) | `data.gov.sg/v1/transport/taxi-availability` | 30s | ✅ Verified |
-| Air Temperature | `data.gov.sg/v1/environment/air-temperature` | 60s | ✅ Verified |
-| Weather Forecast | `data.gov.sg/v1/environment/24-hour-weather-forecast` | 5min | ✅ Verified |
-| PM2.5 Air Quality | `data.gov.sg/v1/environment/pm25` | 1hr | ✅ Verified |
+**Phase 2 — End-to-End Fine-tuning**:
+- Unfreeze backbone with lower LR (1e-4)
+- Context modules at 1e-3
+- 30 epochs with cosine annealing
 
 ## Project Structure
 
 ```
-sg-smart-city-analytics/
-├── src/
-│   ├── ingestion/
-│   │   ├── collector.py         # Async 90-camera scraper + multi-modal metadata
-│   │   └── dataset_formatter.py # Kaggle dataset formatter (stratified splits)
-│   ├── detection/
-│   │   └── detector.py          # YOLOv11 wrapper + auto-labeling
-│   ├── tracking/
-│   │   └── tracker.py           # BoT-SORT tracking + congestion scoring
-│   ├── analytics/
-│   │   ├── predictor.py         # LSTM + Spatial-Temporal Graph Transformer
-│   │   ├── failure_analyzer.py  # 6-category failure taxonomy
-│   │   ├── drift_monitor.py     # PSI + KS-test drift detection
-│   │   └── benchmark.py         # Model comparison suite
-│   ├── api/
-│   │   └── server.py            # FastAPI REST endpoints
-│   └── pipeline.py              # End-to-end pipeline orchestrator
-├── configs/
-│   ├── collection_config.yaml   # API endpoints + collection params
-│   ├── training_config.yaml     # YOLO fine-tuning hyperparams
-│   └── traffic_dataset.yaml     # 6-class dataset definition
-├── tests/
-│   ├── test_collector.py        # Data collector tests (25 tests)
-│   ├── test_detector.py         # Detection + label generation tests
-│   ├── test_analytics.py        # Failure analysis + drift tests
-│   └── test_predictor.py        # Prediction model + feature tests
-├── data/
-│   ├── raw/                     # Collected camera snapshots
-│   └── processed/               # Detection, tracking, analytics outputs
-├── models/                      # Trained weights (gitignored)
-├── reports/                     # Benchmark reports, fleet reports
-└── requirements.txt
+src/
+├── models/                    # Novel CATI architecture
+│   ├── film.py                # FiLM conditioning layer
+│   ├── context_encoder.py     # Environmental metadata encoder
+│   └── cati_detector.py       # Full CATI detector + inference pipeline
+├── ingestion/                 # Data collection
+│   ├── collector.py           # Async Singapore API data collector
+│   └── dataset_formatter.py   # Kaggle dataset formatter
+├── detection/
+│   └── detector.py            # YOLOv11 detection wrapper
+├── tracking/
+│   └── tracker.py             # BoT-SORT multi-object tracking
+├── analytics/
+│   ├── predictor.py           # LSTM + GAT + Transformer prediction
+│   ├── failure_analyzer.py    # 6-category quality taxonomy
+│   ├── drift_monitor.py       # PSI + KS-test data drift
+│   └── benchmark.py           # Model comparison suite
+├── training/
+│   └── train_cati.py          # Two-phase CATI training pipeline
+├── api/
+│   └── server.py              # FastAPI endpoints
+└── pipeline.py                # Pipeline orchestrator
 ```
 
-## Tech Stack
+## Data Collection
 
-| Layer | Technology | Why |
-|---|---|---|
-| Detection | YOLOv11s (Ultralytics) | 9.4M params, 46.6% COCO mAP, 6ms/frame on T4 |
-| Tracking | BoxMOT (BoT-SORT + OSNet x0.25) | Camera motion compensation, motion+appearance fusion |
-| Prediction | PyTorch (LSTM → GAT + Transformer) | Per-camera baseline → spatial-temporal graph upgrade |
-| Failure Analysis | Custom (6-category taxonomy) | Per-camera reliability scorecards |
-| Drift Detection | SciPy (PSI + KS-test) | Statistical, no ML — trustworthy and explainable |
-| API | FastAPI | 10 endpoints for cameras, congestion, failures, drift |
-| Experiment Tracking | MLflow | Training run comparison |
+Images are collected from Singapore's [LTA Traffic Images API](https://data.gov.sg/datasets/d_62ff3afe7f0f43ceab65e7431dd4415d/view) every 60 seconds, along with metadata from:
 
-## Compute Strategy
-
-| Task | Where | Cost |
-|---|---|---|
-| Development | Local (VS Code) | Free |
-| GPU Training | Kaggle (T4, 30hr/week) + Colab (T4) | Free |
-| Data Collection | Azure B1s VM | ~$8 from $100 credits |
-| Dashboard Hosting | Azure App Service (free tier) | Free |
-
-**Total: $0 out of pocket**
-
-## Quick Start
-
-### For Developers (Local Testing)
+- **Weather**: 24-hour forecast + air temperature
+- **Air Quality**: PM2.5 readings by region
+- **Taxi GPS**: ~30,000 taxi positions for traffic proxy
 
 ```bash
-# Clone and setup
-git clone https://github.com/Suhxs-Reddy/sg-smart-city-analytics.git
-cd sg-smart-city-analytics
-python3 -m venv venv
+# Quick 6-minute test
+python -m src.ingestion.collector --duration 0.1
+
+# 24-hour collection
+python -m src.ingestion.collector --duration 24
+```
+
+## Development
+
+```bash
+# Setup
+python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
-# Run tests (80+ unit/integration tests)
-pytest tests/ -v
+# Run tests
+pytest tests/ -v --ignore=tests/test_predictor.py
 
-# Quick data collection test (6 minutes)
-python -m src.ingestion.collector --duration 0.1 --interval 60
+# Run ML tests (requires torch)
+pytest tests/test_models.py tests/test_predictor.py -v
+
+# Lint
+ruff check src/ tests/
+ruff format src/ tests/
 ```
 
-### For Production Deployment
+## CI/CD
 
-**See [Deployment Guide](deploy/DEPLOYMENT.md)** for full instructions.
-
-**TL;DR** — 3-step deployment (~3 hours total):
-
-```bash
-# Step 1: Deploy Azure VM (10 minutes)
-./deploy/setup-azure-vm.sh
-
-# Step 2: Start data collection in Google Colab (continuous)
-# Upload notebooks/collect_data.ipynb to Colab and run
-
-# Step 3: Train model on Kaggle (2-3 hours)
-# Upload notebooks/train_yolo.ipynb to Kaggle and run
-```
-
-After training completes, deploy trained model to Azure:
-
-```bash
-# Step 4: Deploy trained model
-scp best.pt azureuser@<VM_IP>:~/sg-smart-city-analytics/models/
-ssh azureuser@<VM_IP> 'cd sg-smart-city-analytics && docker compose restart api'
-```
-
-**Done!** Your system is now running end-to-end.
-
----
-
-## For Recruiters / Senior Engineers
-
-**What makes this production-grade:**
-
-| Feature | Implementation | Why It Matters |
-|---------|----------------|----------------|
-| **CI/CD** | GitHub Actions (5 workflows) | Every push → auto-test, auto-deploy |
-| **Reproducibility** | MLflow + fixed seeds + config versioning | Experiments are fully reproducible |
-| **Testing** | 80+ unit/integration tests (pytest) | Code quality assurance |
-| **Containerization** | Docker + docker-compose | Deploy anywhere, consistent environments |
-| **Monitoring** | Drift detection (PSI, KS-test) + failure analysis | Catch model degradation early |
-| **Documentation** | Inline docstrings + deployment guide + architecture diagrams | Easy to understand and maintain |
-| **Cost Optimization** | $8/month total (Colab + Kaggle + Vercel free, only Azure VM paid) | Efficient resource usage |
-
-**Key Metrics:**
-- 🎯 **92% mAP** target (vs 78% baseline COCO) — 18% improvement
-- ⚡ **>100 FPS** inference on T4 GPU — real-time capable
-- 📊 **90 cameras** × 60s intervals = 129,600 images/day
-- 🧪 **80+ tests** — comprehensive test coverage
-- 🚀 **<10 min deployment** — from code push to production
-
-**Tech Highlights:**
-- **Detection**: YOLOv11s fine-tuned on UA-DETRAC → Singapore traffic
-- **Tracking**: BoT-SORT + OSNet Re-ID for persistent vehicle identity
-- **Prediction**: Spatial-Temporal Graph Transformer (GAT + Transformer)
-- **MLOps**: MLflow experiment tracking, Docker, CI/CD, automated deployment
-
----
+Single clean GitHub Actions workflow:
+- **lint-and-test**: Ruff linting + pytest (no torch dependency)
+- **test-ml**: PyTorch-dependent model tests with CPU torch
 
 ## License
 
