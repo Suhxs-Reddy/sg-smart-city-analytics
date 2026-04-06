@@ -57,6 +57,11 @@ logger = logging.getLogger(__name__)
 YOLO11S_CHANNEL_DIMS = [256, 256, 512]
 
 
+# YOLOv11s neck channel dimensions at PAN outputs (layers ~16, 19, 22)
+# Verified via verify_layers() in CATIPhase2Trainer before training.
+YOLO11S_NECK_CHANNEL_DIMS = [128, 256, 512]
+
+
 @dataclass
 class CATIConfig:
     """Configuration for the CATI detector.
@@ -66,7 +71,10 @@ class CATIConfig:
         context_dim: Dimension of the context embedding vector.
         camera_embed_dim: Dimension of per-camera learned embedding.
         weather_embed_dim: Dimension of weather condition embedding.
-        backbone_channels: Channel dimensions at P3/P4/P5.
+        backbone_channels: Channel dimensions at backbone P3/P4/P5.
+        neck_channels: Channel dimensions at neck PAN P3/P4/P5.
+                       Empty list = backbone FiLM only (Phase 1 default).
+                       Set to YOLO11S_NECK_CHANNEL_DIMS for Phase 2 neck FiLM.
         num_classes: Traffic object classes.
         conf_threshold: Detection confidence threshold.
         iou_threshold: NMS IoU threshold.
@@ -83,6 +91,7 @@ class CATIConfig:
     camera_embed_dim: int = 16
     weather_embed_dim: int = 16
     backbone_channels: list[int] = field(default_factory=lambda: list(YOLO11S_CHANNEL_DIMS))
+    neck_channels: list[int] = field(default_factory=list)  # empty = backbone FiLM only
     num_classes: int = 6
     conf_threshold: float = 0.25
     iou_threshold: float = 0.45
@@ -130,7 +139,7 @@ class CATIDetector(nn.Module):
             use_spectral_norm=True,
         )
 
-        # Adaptive FiLM layers (one per backbone stage)
+        # Adaptive FiLM layers — one per backbone stage
         self.film_layers = nn.ModuleList(
             [
                 AdaptiveFiLMLayer(
@@ -143,10 +152,35 @@ class CATIDetector(nn.Module):
             ]
         )
 
+        # Optional neck FiLM — conditions PAN feature pyramid outputs.
+        # Enabled when neck_channels is non-empty (Phase 2 with neck conditioning).
+        # Freshly initialized in Phase 2; Phase 1 checkpoint only covers backbone.
+        if self.config.neck_channels:
+            self.neck_film_generator = FiLMGenerator(
+                context_dim=self.config.context_dim,
+                channel_dims=self.config.neck_channels,
+                use_spectral_norm=True,
+            )
+            self.neck_film_layers = nn.ModuleList(
+                [
+                    AdaptiveFiLMLayer(
+                        num_channels=dim,
+                        context_dim=self.config.context_dim,
+                        use_attention=self.config.use_attention,
+                        se_reduction=16,
+                    )
+                    for dim in self.config.neck_channels
+                ]
+            )
+        else:
+            self.neck_film_generator = None
+            self.neck_film_layers = None
+
         logger.info(
             f"CATI initialized: {self.config.num_cameras} cameras, "
             f"context_dim={self.config.context_dim}, "
-            f"FiLM stages={len(self.config.backbone_channels)}, "
+            f"backbone_FiLM={len(self.config.backbone_channels)} stages, "
+            f"neck_FiLM={len(self.config.neck_channels)} stages, "
             f"attention={self.config.use_attention}, "
             f"gps={self.config.use_gps_encoding}"
         )
@@ -169,8 +203,14 @@ class CATIDetector(nn.Module):
         )
 
     def get_film_params(self, context: torch.Tensor) -> list[tuple[torch.Tensor, torch.Tensor]]:
-        """Generate FiLM (γ, β) parameters from context embedding."""
+        """Generate backbone FiLM (γ, β) parameters from context embedding."""
         return self.film_generator(context)
+
+    def get_neck_film_params(self, context: torch.Tensor) -> list[tuple[torch.Tensor, torch.Tensor]]:
+        """Generate neck FiLM (γ, β) parameters from context embedding."""
+        if self.neck_film_generator is None:
+            raise RuntimeError("neck_channels not set in CATIConfig — cannot generate neck FiLM params")
+        return self.neck_film_generator(context)
 
     def apply_film(
         self,
@@ -221,11 +261,17 @@ class CATIDetector(nn.Module):
         context_params = sum(p.numel() for p in self.context_encoder.parameters())
         film_gen_params = sum(p.numel() for p in self.film_generator.parameters())
         film_layer_params = sum(p.numel() for p in self.film_layers.parameters())
-        total = context_params + film_gen_params + film_layer_params
+        neck_params = 0
+        if self.neck_film_generator is not None:
+            neck_params += sum(p.numel() for p in self.neck_film_generator.parameters())
+        if self.neck_film_layers is not None:
+            neck_params += sum(p.numel() for p in self.neck_film_layers.parameters())
+        total = context_params + film_gen_params + film_layer_params + neck_params
         return {
             "context_encoder": context_params,
             "film_generator": film_gen_params,
             "film_layers": film_layer_params,
+            "neck_film": neck_params,
             "total_cati_overhead": total,
         }
 
