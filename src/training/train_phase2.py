@@ -397,6 +397,154 @@ class CATIPhase2Trainer:
             h.remove()
         self._hooks = []
 
+    @staticmethod
+    def evaluate(
+        yolo_weights_path: str,
+        cati_weights_path: str,
+        feature_dir: str,
+        data_yaml: str,
+        device: str = "cuda",
+        use_neck_film: bool = False,
+        neck_hook_layers: list[int] | None = None,
+    ) -> object:
+        """Evaluate CATI with FiLM hooks and per-image context active.
+
+        Use this instead of YOLO.val() for a fair CATI evaluation.
+        Plain YOLO.val() loads backbone weights only — FiLM hooks are never
+        registered, so it measures fine-tuned backbone performance, not CATI.
+
+        Args:
+            yolo_weights_path: Path to Phase 2 YOLO best.pt.
+            cati_weights_path: Path to CATI checkpoint (cati_phase2_final.pt).
+            feature_dir: Feature dir with context JSONs for per-image lookup.
+            data_yaml: Path to YOLO dataset data.yaml.
+            device: Compute device.
+            use_neck_film: Must match how Phase 2 was trained.
+            neck_hook_layers: Neck layer indices (default NECK_HOOK_LAYERS).
+
+        Returns:
+            ultralytics val metrics object (metrics.box.map50, etc.)
+        """
+        from ultralytics import YOLO
+        from ultralytics.models.yolo.detect import DetectionValidator
+
+        _device = torch.device(device if torch.cuda.is_available() else "cpu")
+        _neck_layers = neck_hook_layers or CATIPhase2Trainer.NECK_HOOK_LAYERS
+
+        # Build CATI module with same config as training
+        neck_ch = list(YOLO11S_NECK_CHANNEL_DIMS) if use_neck_film else []
+        config = CATIConfig(
+            num_cameras=90, context_dim=64,
+            use_gps_encoding=True, use_attention=True,
+            neck_channels=neck_ch,
+            use_context_augmentation=False,  # no augmentation at eval
+        )
+        cati = CATIDetector(config).to(_device)
+        if Path(cati_weights_path).exists():
+            ckpt = torch.load(cati_weights_path, map_location=_device, weights_only=False)
+            state = ckpt.get("model_state_dict", ckpt)
+            missing, unexpected = cati.load_state_dict(state, strict=False)
+            if missing:
+                logger.warning(f"CATI eval: missing keys: {missing[:5]}")
+            logger.info(f"CATI eval weights loaded from {cati_weights_path}")
+        else:
+            logger.warning(f"CATI weights not found at {cati_weights_path} — evaluating without conditioning")
+        cati.eval()
+
+        # Context lookup for per-image context injection
+        ctx_lookup = ContextLookup(feature_dir, _device)
+
+        # Shared state — hooks and validator communicate through this dict
+        _state: dict = {
+            "active_ctx": None,
+            "film_cache": None,
+            "neck_film_cache": None,
+            "ctx_vec": None,
+        }
+
+        # Load YOLO and register FiLM hooks
+        yolo = YOLO(yolo_weights_path)
+        model = yolo.model.model
+
+        all_layers = list(CATIPhase2Trainer.BACKBONE_HOOK_LAYERS)
+        if use_neck_film:
+            all_layers += _neck_layers
+        num_backbone = len(CATIPhase2Trainer.BACKBONE_HOOK_LAYERS)
+        hooks = []
+
+        for stage_idx, layer_idx in enumerate(all_layers):
+            is_neck = stage_idx >= num_backbone
+            n_idx = stage_idx - num_backbone
+
+            def _make_hook(s_idx: int, is_neck_stage: bool, neck_stage_idx: int):
+                def hook(_mod: nn.Module, _in: tuple, output: torch.Tensor) -> torch.Tensor:
+                    ctx = _state["active_ctx"]
+                    if ctx is None:
+                        return output
+                    feat = output[0] if isinstance(output, tuple | list) else output
+                    if not isinstance(feat, torch.Tensor):
+                        return output
+                    feat = feat.to(_device)
+
+                    if not is_neck_stage:
+                        if s_idx == 0 or _state["film_cache"] is None:
+                            with torch.no_grad():
+                                ctx_vec = cati.encode_context(**ctx)
+                                _state["film_cache"] = cati.get_film_params(ctx_vec)
+                                _state["ctx_vec"] = ctx_vec
+                                if use_neck_film:
+                                    _state["neck_film_cache"] = cati.get_neck_film_params(ctx_vec)
+                        gamma, beta = _state["film_cache"][s_idx]
+                        with torch.no_grad():
+                            return cati.film_layers[s_idx](feat, gamma, beta, _state["ctx_vec"])
+                    else:
+                        if _state["neck_film_cache"] is None or _state["ctx_vec"] is None:
+                            return output
+                        gamma, beta = _state["neck_film_cache"][neck_stage_idx]
+                        with torch.no_grad():
+                            return cati.neck_film_layers[neck_stage_idx](
+                                feat, gamma, beta, _state["ctx_vec"]
+                            )
+                return hook
+
+            hooks.append(model[layer_idx].register_forward_hook(
+                _make_hook(stage_idx, is_neck, n_idx)
+            ))
+
+        logger.info(f"CATI eval: {len(hooks)} FiLM hooks registered")
+
+        # Subclass DetectionValidator to inject per-image context before each batch
+        class CATIDetectionValidator(DetectionValidator):
+            def preprocess_batch(self, batch):
+                batch = super().preprocess_batch(batch)
+                img_paths = batch.get("im_file", [])
+                if img_paths:
+                    try:
+                        _state["active_ctx"] = ctx_lookup.batch_tensors(img_paths)
+                        _state["film_cache"] = None
+                        _state["neck_film_cache"] = None
+                    except Exception as e:
+                        logger.warning(f"Context lookup failed during eval: {e}")
+                        _state["active_ctx"] = None
+                else:
+                    _state["active_ctx"] = None
+                return batch
+
+        try:
+            metrics = yolo.val(
+                data=data_yaml,
+                imgsz=640,
+                device=str(_device),
+                verbose=True,
+                validator=CATIDetectionValidator,
+            )
+        finally:
+            for h in hooks:
+                h.remove()
+            _state["active_ctx"] = None
+
+        return metrics
+
     def train(self):
         """Run Phase 2 end-to-end training."""
         data_yaml = str(Path(self.yolo_dataset_dir) / "data.yaml")
