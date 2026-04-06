@@ -286,8 +286,15 @@ class DataCollector:
             logger.warning(f"Failed to download image for camera {camera_id}")
             return False
 
-        # Compute hash
+        # Compute hash and skip if this is the same frame the camera last served.
+        # LTA cameras refresh every 60-90s; if our collection interval is tighter
+        # than the camera's refresh rate, we'd otherwise store duplicate frames.
         image_hash = compute_image_hash(image_bytes)
+        last_hash_key = f"_last_hash_{camera_id}"
+        if getattr(self, last_hash_key, None) == image_hash:
+            logger.debug(f"Camera {camera_id}: duplicate frame skipped")
+            return False
+        setattr(self, last_hash_key, image_hash)
 
         # Save image
         image_path = self._get_image_path(camera_id, collection_time)

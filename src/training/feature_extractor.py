@@ -358,8 +358,15 @@ class FeatureExtractor:
         return stats
 
     def _gather_pairs(self, raw_path: Path) -> list[dict]:
-        """Gather all image + metadata pairs from the raw data directory."""
+        """Gather all image + metadata pairs from the raw data directory.
+
+        Deduplicates by image hash (stored in metadata by the collector) so
+        that repeated snapshots of the same scene — common when a camera hasn't
+        refreshed between collection cycles — don't inflate the training set.
+        Falls back to file-size deduplication when no hash is present.
+        """
         pairs = []
+        seen_hashes: set[str] = set()
 
         for jsonl_file in raw_path.rglob("*.jsonl"):
             with open(jsonl_file) as f:
@@ -375,10 +382,24 @@ class FeatureExtractor:
                     img_name = Path(record.get("image_path", "")).name
                     img_path = jsonl_file.parent / img_name
 
-                    if img_path.exists() and img_path.stat().st_size > 0:
-                        record["absolute_image_path"] = str(img_path)
-                        pairs.append(record)
+                    if not (img_path.exists() and img_path.stat().st_size > 0):
+                        continue
 
+                    # Deduplicate: prefer stored hash, fall back to size+camera key
+                    img_hash = record.get("image_hash_sha256")
+                    if img_hash:
+                        dedup_key = img_hash
+                    else:
+                        dedup_key = f"{record.get('camera_id')}:{img_path.stat().st_size}"
+
+                    if dedup_key in seen_hashes:
+                        continue
+                    seen_hashes.add(dedup_key)
+
+                    record["absolute_image_path"] = str(img_path)
+                    pairs.append(record)
+
+        logger.info(f"Gathered {len(pairs)} unique image+metadata pairs (deduped by hash)")
         return pairs
 
     def _process_pair(self, pair: dict, output_dir: Path):
