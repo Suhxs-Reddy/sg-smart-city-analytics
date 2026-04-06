@@ -238,40 +238,37 @@ class CATIPhase2Trainer:
             f"freeze_backbone={self.freeze_backbone_epochs} epochs"
         )
 
-        # Use ultralytics callbacks to inject context before each batch
-        def on_train_batch_start(trainer_obj):
-            batch = trainer_obj.batch
-            if batch is None:
-                return
-            img_paths = batch.get("im_file", [])
-            if not img_paths:
-                self._active_ctx = None
-                return
-            try:
-                self._active_ctx = self.ctx_lookup.batch_tensors(img_paths)
-                self._film_cache = None  # Reset cache for new batch
-            except Exception as e:
-                logger.warning(f"Context lookup failed: {e}")
-                self._active_ctx = None
+        # Subclass DetectionTrainer to override preprocess_batch where
+        # the batch dict (with im_file paths) is guaranteed to be available.
+        from ultralytics.models.yolo.detect import DetectionTrainer
+
+        cati_trainer = self  # capture for closure
+
+        class CATIDetectionTrainer(DetectionTrainer):
+            def preprocess_batch(self, batch):
+                batch = super().preprocess_batch(batch)
+                img_paths = batch.get("im_file", [])
+                if img_paths:
+                    try:
+                        cati_trainer._active_ctx = cati_trainer.ctx_lookup.batch_tensors(img_paths)
+                        cati_trainer._film_cache = None
+                    except Exception as e:
+                        logger.warning(f"Context lookup failed: {e}")
+                        cati_trainer._active_ctx = None
+                else:
+                    cati_trainer._active_ctx = None
+                return batch
 
         def on_train_batch_end(trainer_obj):
-            # Step CATI optimizer after each YOLO backward pass
-            if self._active_ctx is not None:
+            if cati_trainer._active_ctx is not None:
                 cati_optimizer.step()
                 cati_optimizer.zero_grad()
-                self.ema.update(self.cati)
+                cati_trainer.ema.update(cati_trainer.cati)
 
         def on_train_epoch_end(trainer_obj):
             epoch = trainer_obj.epoch
-            # Freeze backbone for first N epochs (warm up CATI only)
-            if epoch < self.freeze_backbone_epochs:
-                for p in self.yolo.model.model.parameters():
-                    p.requires_grad_(False)
-            else:
-                for p in self.yolo.model.model.parameters():
-                    p.requires_grad_(True)
-
-            # Save CATI checkpoint every 5 epochs
+            for p in self.yolo.model.model.parameters():
+                p.requires_grad_(epoch >= self.freeze_backbone_epochs)
             if (epoch + 1) % 5 == 0:
                 ckpt_path = self.save_dir / f"cati_phase2_epoch{epoch+1}.pt"
                 torch.save({
@@ -280,7 +277,7 @@ class CATIPhase2Trainer:
                     "ema_state_dict": self.ema.state_dict(),
                     "optimizer_state_dict": cati_optimizer.state_dict(),
                 }, str(ckpt_path))
-                logger.info(f"CATI Phase 2 checkpoint saved: {ckpt_path}")
+                logger.info(f"CATI checkpoint saved: {ckpt_path}")
 
         def on_train_end(trainer_obj):
             self._remove_hooks()
@@ -290,15 +287,13 @@ class CATIPhase2Trainer:
                 "model_state_dict": self.cati.state_dict(),
                 "ema_state_dict": self.ema.state_dict(),
             }, str(final_path))
-            logger.info(f"Phase 2 training complete. CATI saved to {final_path}")
+            logger.info(f"Phase 2 complete. CATI saved to {final_path}")
 
-        # Register callbacks
-        self.yolo.add_callback("on_train_batch_start", on_train_batch_start)
         self.yolo.add_callback("on_train_batch_end", on_train_batch_end)
         self.yolo.add_callback("on_train_epoch_end", on_train_epoch_end)
         self.yolo.add_callback("on_train_end", on_train_end)
 
-        # Start YOLO training
+        # Start YOLO training using the custom trainer subclass
         results = self.yolo.train(
             data=data_yaml,
             epochs=self.epochs,
@@ -313,6 +308,7 @@ class CATIPhase2Trainer:
             save=True,
             verbose=True,
             workers=0,
+            trainer=CATIDetectionTrainer,
         )
 
         return results
