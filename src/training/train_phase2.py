@@ -267,8 +267,12 @@ class CATIPhase2Trainer:
 
         def on_train_epoch_end(trainer_obj):
             epoch = trainer_obj.epoch
-            for p in self.yolo.model.model.parameters():
-                p.requires_grad_(epoch >= self.freeze_backbone_epochs)
+            # Only freeze backbone layers (0 → max hook layer); head must stay
+            # trainable so the detection loss always has a grad_fn path.
+            for i, layer in enumerate(self.yolo.model.model):
+                if i <= max(self.HOOK_LAYERS):
+                    for p in layer.parameters():
+                        p.requires_grad_(epoch >= self.freeze_backbone_epochs)
             if (epoch + 1) % 5 == 0:
                 ckpt_path = self.save_dir / f"cati_phase2_epoch{epoch+1}.pt"
                 torch.save({
