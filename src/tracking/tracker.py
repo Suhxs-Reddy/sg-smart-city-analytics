@@ -1,39 +1,122 @@
 """
-ByteTrack — Multi-Object Tracker (from scratch)
+ByteTrack — Singapore Expressway Multi-Object Tracker (from scratch)
 
-Full implementation of ByteTrack (Zhang et al., 2022) for vehicle tracking:
+Full ByteTrack (Zhang et al., ECCV 2022) implementation tailored to the
+Singapore LTA expressway camera network:
+
+  Core tracker:
   - Kalman filter with constant-velocity motion model
-  - Hungarian algorithm (optimal assignment via scipy)
-  - Two-step association: high-confidence → low-confidence detections
+  - Hungarian algorithm (scipy) for optimal assignment
+  - Two-step association: high-conf → low-conf detections
   - Track state machine: Tentative → Confirmed → Lost → Removed
-  - Appearance embedding slots for cross-camera re-ID (vehicle_reid.py)
+  - EMA appearance embedding slots for cross-camera re-ID
 
-Reference:
-  ByteTrack: Multi-Object Tracking by Associating Every Detection Box
-  Zhang et al., ECCV 2022. https://arxiv.org/abs/2110.06864
+  Singapore-specific extensions:
+  - Direction-constrained Kalman: process noise is asymmetric per road axis.
+    N-S roads (CTE, BKE, KJE) strongly resist horizontal drift;
+    E-W roads (PIE, AYE, ECP, TPE) resist vertical drift.
+    This matches the physical constraint that expressway vehicles
+    can only move along the road, not across it.
+  - Entry/exit zone tagging: each track records which frame edge it
+    entered and exited from (LEFT/RIGHT for E-W roads, TOP/BOTTOM for
+    N-S roads). Used by speed_estimator.py to timestamp inter-camera
+    vehicle handoffs.
+  - SingaporeTracker: high-level wrapper that looks up road direction
+    from CameraNetwork by camera_id and configures ByteTracker
+    automatically.
+
+References:
+  ByteTrack: Zhang et al., ECCV 2022. https://arxiv.org/abs/2110.06864
+  LTA camera network: data.gov.sg/v1/transport/traffic-images
 
 Integrates with:
+  camera_network.py     (road direction lookup per camera_id)
   traffic_analytics.py  (Detection dataclass as input)
   vehicle_reid.py       (fills track.embedding for cross-camera matching)
+  speed_estimator.py    (consumes track.entry_edge / exit_edge + timestamps)
   inference.py          (called per-frame in the main pipeline)
 
 Usage:
-    from src.tracking.tracker import ByteTracker, Detection
+    from src.tracking.tracker import SingaporeTracker, Detection
 
-    tracker = ByteTracker()
-    tracks = tracker.update(detections, frame_id=1)
+    tracker = SingaporeTracker(camera_id="1001")   # auto-configures for CTE
+    tracks = tracker.update(detections, frame_id=1, frame_wh=(1920, 1080))
     for t in tracks:
-        print(t.track_id, t.cls, t.bbox_tlbr, t.embedding)
+        print(t.track_id, t.cls, t.entry_edge, t.exit_edge, t.embedding)
 """
 
 from __future__ import annotations
 
 import numpy as np
 from dataclasses import dataclass, field
-from enum import IntEnum
+from enum import IntEnum, auto
 from typing import Optional
 
 from scipy.optimize import linear_sum_assignment
+
+
+# ---------------------------------------------------------------------------
+# Road motion axis — which pixel axis vehicles move along
+# ---------------------------------------------------------------------------
+
+class RoadAxis(IntEnum):
+    HORIZONTAL = auto()   # E-W roads: PIE, AYE, ECP, TPE, SLE, MCE
+    VERTICAL   = auto()   # N-S roads: CTE, BKE, KJE, KPE, NSC
+    UNKNOWN    = auto()   # Fallback — no constraint applied
+
+_ROAD_AXIS: dict[str, RoadAxis] = {
+    "PIE": RoadAxis.HORIZONTAL,
+    "AYE": RoadAxis.HORIZONTAL,
+    "ECP": RoadAxis.HORIZONTAL,
+    "TPE": RoadAxis.HORIZONTAL,
+    "SLE": RoadAxis.HORIZONTAL,
+    "MCE": RoadAxis.HORIZONTAL,
+    "CTE": RoadAxis.VERTICAL,
+    "BKE": RoadAxis.VERTICAL,
+    "KJE": RoadAxis.VERTICAL,
+    "KPE": RoadAxis.VERTICAL,
+    "NSC": RoadAxis.VERTICAL,
+}
+
+# Frame edge zones — a track is "at an edge" if its bbox overlaps
+# within EDGE_ZONE_FRACTION of the frame width/height
+EDGE_ZONE_FRACTION = 0.12
+
+
+class FrameEdge(IntEnum):
+    LEFT   = auto()
+    RIGHT  = auto()
+    TOP    = auto()
+    BOTTOM = auto()
+    INTERIOR = auto()   # Not near any edge
+
+    def __str__(self):
+        return self.name
+
+
+def _detect_edge(
+    bbox: tuple[float, float, float, float],
+    frame_wh: tuple[int, int],
+    axis: RoadAxis,
+) -> FrameEdge:
+    """Return which frame edge a bbox is touching, constrained to road axis."""
+    x1, y1, x2, y2 = bbox
+    W, H = frame_wh
+    z = EDGE_ZONE_FRACTION
+
+    if axis == RoadAxis.HORIZONTAL:
+        if x1 < W * z:        return FrameEdge.LEFT
+        if x2 > W * (1 - z):  return FrameEdge.RIGHT
+    elif axis == RoadAxis.VERTICAL:
+        if y1 < H * z:        return FrameEdge.TOP
+        if y2 > H * (1 - z):  return FrameEdge.BOTTOM
+    else:
+        # No axis constraint — check all edges
+        if x1 < W * z:        return FrameEdge.LEFT
+        if x2 > W * (1 - z):  return FrameEdge.RIGHT
+        if y1 < H * z:        return FrameEdge.TOP
+        if y2 > H * (1 - z):  return FrameEdge.BOTTOM
+    return FrameEdge.INTERIOR
 
 
 # ---------------------------------------------------------------------------
@@ -59,15 +142,26 @@ class TrackState(IntEnum):
 
 class KalmanFilter:
     """
-    Kalman filter for bounding box tracking.
+    Direction-constrained Kalman filter for Singapore expressway tracking.
     State: [cx, cy, a, h, vcx, vcy, va, vh]
     Observation: [cx, cy, a, h]
+
+    The process noise matrix Q is asymmetric when a road axis is specified:
+    - HORIZONTAL roads (PIE/AYE/ECP): vcy noise reduced 10× (vehicles
+      physically cannot move far perpendicular to the road in pixel space).
+    - VERTICAL roads (CTE/BKE/KJE): vcx noise reduced 10×.
+    This encodes the Singapore road geometry directly into the motion model.
     """
 
     ndim = 4        # observation dimensions
     dt   = 1.0      # time step (one frame)
 
-    def __init__(self):
+    # How much to suppress perpendicular velocity noise (higher = stronger constraint)
+    PERP_SUPPRESSION = 10.0
+
+    def __init__(self, axis: RoadAxis = RoadAxis.UNKNOWN):
+        self.axis = axis
+
         # State transition matrix (constant velocity)
         self.F = np.eye(2 * self.ndim, dtype=np.float32)
         for i in range(self.ndim):
@@ -117,6 +211,14 @@ class KalmanFilter:
             1e-5,
             self._std_weight_vel * mean[3],
         ]
+
+        # Direction constraint: suppress perpendicular velocity noise.
+        # Index 4=vcx, 5=vcy in the [pos(4), vel(4)] layout.
+        if self.axis == RoadAxis.HORIZONTAL:
+            std_vel[1] /= self.PERP_SUPPRESSION   # suppress vcy
+        elif self.axis == RoadAxis.VERTICAL:
+            std_vel[0] /= self.PERP_SUPPRESSION   # suppress vcx
+
         Q = np.diag(np.square(std_pos + std_vel, dtype=np.float32))
 
         mean = self.F @ mean
@@ -195,7 +297,7 @@ _track_counter = 0
 
 @dataclass
 class Track:
-    """Single vehicle track with Kalman state and metadata."""
+    """Single vehicle track with Kalman state, edge events, and re-ID embedding."""
 
     track_id:  int
     cls:       str
@@ -206,15 +308,24 @@ class Track:
     covariance: np.ndarray
 
     # Lifecycle counters
-    hits:           int = 1    # consecutive matched frames
-    age:            int = 1    # total frames since creation
+    hits:           int = 1
+    age:            int = 1
     time_since_update: int = 0
 
     # Confidence
     score: float = 0.0
 
-    # Appearance embedding (for cross-camera re-ID)
+    # Appearance embedding (updated as EMA each frame, consumed by vehicle_reid.py)
     embedding: Optional[np.ndarray] = None
+
+    # Entry / exit zone events — set by SingaporeTracker on first/last detection.
+    # Used by speed_estimator.py to timestamp cross-camera handoffs.
+    entry_edge:      FrameEdge = FrameEdge.INTERIOR
+    exit_edge:       FrameEdge = FrameEdge.INTERIOR
+    entry_frame_id:  int = 0
+    exit_frame_id:   int = 0
+    entry_timestamp: str = ""    # ISO 8601 — set by pipeline
+    exit_timestamp:  str = ""    # ISO 8601 — set by pipeline
 
     @property
     def bbox_tlbr(self) -> tuple[float, float, float, float]:
@@ -326,15 +437,17 @@ class ByteTracker:
         match_thresh:     IoU cost threshold for a valid match (1 - IoU < thresh).
         min_hits:         Consecutive hits before Tentative → Confirmed.
         low_conf_thresh:  Minimum confidence for low-confidence pool.
+        axis:             Road motion axis for direction-constrained Kalman filter.
     """
 
     def __init__(
         self,
-        track_thresh:    float = 0.45,
-        track_buffer:    int   = 30,
-        match_thresh:    float = 0.80,
-        min_hits:        int   = 3,
-        low_conf_thresh: float = 0.10,
+        track_thresh:    float     = 0.45,
+        track_buffer:    int       = 30,
+        match_thresh:    float     = 0.80,
+        min_hits:        int       = 3,
+        low_conf_thresh: float     = 0.10,
+        axis:            RoadAxis  = RoadAxis.UNKNOWN,
     ):
         self.track_thresh    = track_thresh
         self.track_buffer    = track_buffer
@@ -342,7 +455,7 @@ class ByteTracker:
         self.min_hits        = min_hits
         self.low_conf_thresh = low_conf_thresh
 
-        self._kf: KalmanFilter = KalmanFilter()
+        self._kf: KalmanFilter = KalmanFilter(axis=axis)
         self._tracks: list[Track] = []
         self._frame_id: int = 0
         self._next_id: int  = 1
@@ -457,6 +570,92 @@ class ByteTracker:
 
 
 # ---------------------------------------------------------------------------
+# Singapore-aware tracker — wraps ByteTracker with camera context
+# ---------------------------------------------------------------------------
+
+class SingaporeTracker:
+    """
+    High-level tracker tailored to the Singapore LTA expressway network.
+
+    Automatically configures ByteTracker with the correct road axis and
+    handles entry/exit zone tagging for inter-camera speed estimation.
+
+    Args:
+        camera_id:  LTA camera ID (e.g. "1001"). Used to look up road/axis
+                    from CameraNetwork.
+        **kwargs:   Forwarded to ByteTracker (track_thresh, match_thresh, etc.)
+
+    Example:
+        tracker = SingaporeTracker(camera_id="4701")  # PIE → HORIZONTAL axis
+        for frame_id, (dets, timestamp) in enumerate(frames):
+            tracks = tracker.update(dets, frame_id, frame_wh=(1920, 1080),
+                                    timestamp=timestamp)
+            # tracks[i].entry_edge, .exit_edge are set automatically
+    """
+
+    def __init__(self, camera_id: str = "", **kwargs):
+        self.camera_id = camera_id
+        self.road      = "Unknown"
+        self.axis      = RoadAxis.UNKNOWN
+
+        if camera_id:
+            self._resolve_camera(camera_id)
+
+        self._tracker = ByteTracker(axis=self.axis, **kwargs)
+
+    def _resolve_camera(self, camera_id: str):
+        """Look up road and axis from CameraNetwork."""
+        try:
+            from src.analytics.camera_network import CameraNetwork
+            net = CameraNetwork()
+            node = net.nodes.get(camera_id)
+            if node:
+                self.road = node.road
+                self.axis = _ROAD_AXIS.get(node.road, RoadAxis.UNKNOWN)
+        except Exception:
+            pass   # Graceful degradation — no axis constraint applied
+
+    def update(
+        self,
+        detections: list[Detection],
+        frame_id:   int,
+        frame_wh:   tuple[int, int] = (1920, 1080),
+        timestamp:  str = "",
+    ) -> list[Track]:
+        """
+        Process one frame. Extends ByteTracker.update() with:
+          - Entry edge tagging on first confirmation
+          - Exit edge tagging when a track is about to be removed
+        """
+        tracks = self._tracker.update(detections, frame_id)
+
+        for t in tracks:
+            bbox = t.bbox_tlbr
+            edge = _detect_edge(bbox, frame_wh, self.axis)
+
+            # Tag entry edge on first confirmed frame
+            if t.hits == self._tracker.min_hits:
+                t.entry_edge      = edge
+                t.entry_frame_id  = frame_id
+                t.entry_timestamp = timestamp
+
+            # Continuously update exit edge — last observed value persists
+            if edge != FrameEdge.INTERIOR:
+                t.exit_edge      = edge
+                t.exit_frame_id  = frame_id
+                t.exit_timestamp = timestamp
+
+        return tracks
+
+    def reset(self):
+        self._tracker.reset()
+
+    @property
+    def road_info(self) -> dict:
+        return {"camera_id": self.camera_id, "road": self.road, "axis": self.axis.name}
+
+
+# ---------------------------------------------------------------------------
 # Smoke test
 # ---------------------------------------------------------------------------
 
@@ -465,33 +664,41 @@ if __name__ == "__main__":
     random.seed(42)
     np.random.seed(42)
 
-    tracker = ByteTracker()
+    # Test on camera 4701 (PIE — HORIZONTAL axis)
+    tracker = SingaporeTracker(camera_id="4701")
+    print(f"Camera: {tracker.camera_id}  Road: {tracker.road}  Axis: {tracker.axis.name}")
+    print()
+    print("Simulating 10 frames — 3 vehicles moving left→right (PIE eastbound):")
+    print(f"{'Frame':<6} {'Tracks':<8} {'IDs & edges'}")
+    print("-" * 60)
 
-    print("Simulating 10 frames with 3 vehicles...")
-    print(f"{'Frame':<6} {'Active tracks':<14} {'Track IDs'}")
-    print("-" * 40)
-
-    # Simulate 3 vehicles moving across the frame
+    W, H = 1920, 1080
+    # Vehicles move ~40-60px/frame (realistic for expressway cameras at 640→1920 scale)
+    # vx must be < bbox width to maintain IoU > 0 between consecutive frames
     vehicles = [
-        {"x": 100.0, "y": 200.0, "w": 80.0, "h": 50.0, "vx": 5.0, "vy": 0.0, "cls": "car"},
-        {"x": 400.0, "y": 300.0, "w": 120.0, "h": 70.0, "vx": 8.0, "vy": 1.0, "cls": "bus"},
-        {"x": 700.0, "y": 250.0, "w": 60.0, "h": 40.0, "vx": 6.0, "vy": -1.0, "cls": "motorcycle"},
+        {"x":  50.0, "y": 400.0, "w": 120.0, "h": 70.0, "vx": 50.0, "vy":  0.5, "cls": "car"},
+        {"x": 250.0, "y": 500.0, "w": 150.0, "h": 90.0, "vx": 40.0, "vy": -0.5, "cls": "bus"},
+        {"x": 100.0, "y": 350.0, "w":  80.0, "h": 50.0, "vx": 60.0, "vy":  0.3, "cls": "motorcycle"},
     ]
 
     for frame in range(1, 11):
         dets = []
         for v in vehicles:
-            # Add slight noise to simulate imperfect detection
-            nx = v["x"] + random.gauss(0, 2)
-            ny = v["y"] + random.gauss(0, 2)
-            dets.append(Detection(
-                cls=v["cls"],
-                bbox=(nx, ny, nx + v["w"], ny + v["h"]),
-                conf=random.uniform(0.6, 0.95),
-            ))
+            if 0 < v["x"] < W:
+                nx = v["x"] + random.gauss(0, 3)
+                ny = v["y"] + random.gauss(0, 2)
+                dets.append(Detection(
+                    cls=v["cls"],
+                    bbox=(nx, ny, nx + v["w"], ny + v["h"]),
+                    conf=random.uniform(0.6, 0.95),
+                ))
             v["x"] += v["vx"]
             v["y"] += v["vy"]
 
-        active = tracker.update(dets, frame_id=frame)
-        ids = [f"{t.track_id}({t.cls[:3]})" for t in active]
-        print(f"{frame:<6} {len(active):<14} {', '.join(ids) if ids else '—'}")
+        active = tracker.update(dets, frame_id=frame, frame_wh=(W, H),
+                                timestamp=f"2026-04-09T08:{frame:02d}:00+08:00")
+        info = [
+            f"{t.track_id}({t.cls[:3]}) entry={t.entry_edge} exit={t.exit_edge}"
+            for t in active
+        ]
+        print(f"{frame:<6} {len(active):<8} {', '.join(info) if info else '—'}")
