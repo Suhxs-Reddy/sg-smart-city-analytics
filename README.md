@@ -8,7 +8,7 @@ app_port: 7860
 hardware: cpu-basic
 pinned: true
 license: mit
-short_description: Real-time Singapore expressway live traffic cameras + AI analytics
+short_description: Singapore expressway live cameras + AI analytics
 ---
 
 # Singapore Smart City Traffic Analytics
