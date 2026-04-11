@@ -236,7 +236,7 @@ class _CATIInferenceDetector:
         import torch
 
         # Build context — use lookup if available, else use provided metadata
-        meta = self._ctx_lookup.get(image_stem) if image_stem else None
+        meta = self._ctx_lookup.get(image_stem) if image_stem else None  # None → fallback to live metadata
         if meta is None:
             meta = {
                 "weather_condition": weather,
@@ -415,7 +415,7 @@ class CATIPipeline:
         # 2 — CATI detection (FiLM-conditioned)
         raw_dets, inference_ms = self._detector.run(
             image_bgr=image_bgr,
-            image_stem=image_stem or Path(timestamp).stem,
+            image_stem=image_stem,
             weather=weather,
             temperature=temperature,
             hour=float(hour),

@@ -445,7 +445,7 @@ class ByteTracker:
         track_thresh:    float     = 0.45,
         track_buffer:    int       = 30,
         match_thresh:    float     = 0.80,
-        min_hits:        int       = 3,
+        min_hits:        int       = 2,
         low_conf_thresh: float     = 0.10,
         axis:            RoadAxis  = RoadAxis.UNKNOWN,
     ):
