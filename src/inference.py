@@ -272,9 +272,21 @@ class _CATIInferenceDetector:
 
         self._ctx_vec = None   # clear after inference
 
-        # Parse detections
+        # Class-specific minimum confidence floors.
+        # Expressway cameras almost never contain pedestrians or cyclists —
+        # person/bicycle detections at low confidence are overwhelmingly FP
+        # (rain artifacts, road markings, barriers). Vehicle classes benefit
+        # from the adaptive lower threshold; non-vehicle classes do not.
         CLASS_NAMES = {0: "person", 1: "bicycle", 2: "car",
                        3: "motorcycle", 5: "bus", 7: "truck"}
+        _CLS_MIN_CONF = {
+            "person":     0.45,   # expressway FP rate is very high at low conf
+            "bicycle":    0.40,   # rare on expressways; high FP from lane markings
+            "car":        adaptive_conf,
+            "motorcycle": adaptive_conf,
+            "bus":        adaptive_conf,
+            "truck":      adaptive_conf,
+        }
         detections = []
         boxes = results[0].boxes
         if boxes is not None and len(boxes) > 0:
@@ -282,11 +294,15 @@ class _CATIInferenceDetector:
                 cls_id = int(box.cls[0])
                 if cls_id not in CLASS_NAMES:
                     continue
+                cls_name = CLASS_NAMES[cls_id]
+                conf_val = float(box.conf[0])
+                if conf_val < _CLS_MIN_CONF.get(cls_name, adaptive_conf):
+                    continue
                 x1, y1, x2, y2 = box.xyxy[0].cpu().numpy().tolist()
                 detections.append({
-                    "cls":  CLASS_NAMES[cls_id],
+                    "cls":  cls_name,
                     "bbox": (x1, y1, x2, y2),
-                    "conf": float(box.conf[0]),
+                    "conf": conf_val,
                 })
 
         return detections, inference_ms
