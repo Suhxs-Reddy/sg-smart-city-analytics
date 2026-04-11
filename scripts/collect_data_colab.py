@@ -1,8 +1,7 @@
 """
 Singapore Smart City — Data Collection Script for Google Colab
 
-Run data collection from Google Colab when you don't have
-an Azure VM ready. Saves data to Google Drive for persistence.
+Run data collection from Google Colab. Saves data to Google Drive for persistence.
 
 Usage:
     1. Open in Google Colab (no GPU needed)

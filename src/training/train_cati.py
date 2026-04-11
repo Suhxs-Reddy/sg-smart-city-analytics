@@ -234,9 +234,9 @@ class ContextPredictionHead(nn.Module):
             nn.Dropout(0.1),
         )
         self.weather_head = nn.Linear(hidden, num_weather_classes)
-        self.hour_head = nn.Linear(hidden, 2)     # sin/cos
+        self.hour_head = nn.Linear(hidden, 2)  # sin/cos
         self.camera_head = nn.Linear(hidden, num_cameras)
-        self.temp_head = nn.Linear(hidden, 1)     # normalized temperature
+        self.temp_head = nn.Linear(hidden, 1)  # normalized temperature
 
     def forward(self, features: list[torch.Tensor]) -> dict[str, torch.Tensor]:
         """Pool all stages and predict context variables.

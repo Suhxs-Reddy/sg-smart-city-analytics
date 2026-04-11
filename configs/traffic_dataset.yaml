@@ -1,7 +1,7 @@
 # =============================================================================
 # Traffic Dataset Configuration (YOLO format)
 # =============================================================================
-# Update paths after preparing the dataset on Colab/Azure
+# Update paths after preparing the dataset on Colab or your training machine
 
 # Paths (update these to match your Colab/VM directory structure)
 path: /content/datasets/sg_traffic        # Root dataset directory

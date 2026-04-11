@@ -11,7 +11,7 @@ Can be run as:
 Each stage reads from and writes to well-defined directories,
 enabling resumable, modular execution.
 
-Designed for Colab/Azure execution.
+Designed for Colab or Docker (HuggingFace Spaces) execution.
 """
 
 import json

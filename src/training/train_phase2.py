@@ -78,8 +78,8 @@ class _ContextRegHead(nn.Module):
     def __init__(self, context_dim: int, num_weather_classes: int = len(WEATHER_CONDITIONS)):
         super().__init__()
         self.weather_head = nn.Linear(context_dim, num_weather_classes)
-        self.hour_head = nn.Linear(context_dim, 2)   # sin/cos encoding
-        self.temp_head = nn.Linear(context_dim, 1)   # normalized temperature
+        self.hour_head = nn.Linear(context_dim, 2)  # sin/cos encoding
+        self.temp_head = nn.Linear(context_dim, 1)  # normalized temperature
 
     def compute_loss(
         self,
@@ -144,10 +144,16 @@ class ContextLookup:
         )
         ctx: dict[str, torch.Tensor] = {
             "weather_id": torch.tensor([weather_id], dtype=torch.long, device=self.device),
-            "temperature": torch.tensor([meta.get("temperature_celsius", 28.0)], dtype=torch.float32, device=self.device),
-            "pm25": torch.tensor([meta.get("pm25_reading", 15.0)], dtype=torch.float32, device=self.device),
+            "temperature": torch.tensor(
+                [meta.get("temperature_celsius", 28.0)], dtype=torch.float32, device=self.device
+            ),
+            "pm25": torch.tensor(
+                [meta.get("pm25_reading", 15.0)], dtype=torch.float32, device=self.device
+            ),
             "hour": torch.tensor([meta.get("hour", 12.0)], dtype=torch.float32, device=self.device),
-            "camera_id": torch.tensor([meta.get("camera_idx", 0)], dtype=torch.long, device=self.device),
+            "camera_id": torch.tensor(
+                [meta.get("camera_idx", 0)], dtype=torch.long, device=self.device
+            ),
             "resolution_id": torch.tensor([resolution_id], dtype=torch.long, device=self.device),
         }
         lat = meta.get("camera_latitude")
@@ -163,9 +169,13 @@ class ContextLookup:
         Falls back to default (clear/28°C/camera 0) for images not in lookup.
         """
         default_meta: dict = {
-            "weather_condition": "clear", "temperature_celsius": 28.0,
-            "pm25_reading": 15.0, "hour": 12.0, "camera_idx": 0,
-            "image_width": 1920, "image_height": 1080,
+            "weather_condition": "clear",
+            "temperature_celsius": 28.0,
+            "pm25_reading": 15.0,
+            "hour": 12.0,
+            "camera_idx": 0,
+            "image_width": 1920,
+            "image_height": 1080,
         }
         singles = [self.to_tensors(self.get(p) or default_meta) for p in img_paths]
         all_keys = singles[0].keys()
@@ -240,14 +250,17 @@ class CATIPhase2Trainer:
 
         # Load YOLO
         from ultralytics import YOLO
+
         self.yolo = YOLO(f"{model_variant}.pt")
         logger.info(f"YOLO {model_variant} loaded")
 
         # Load CATI with Phase 1 weights
         neck_ch = list(YOLO11S_NECK_CHANNEL_DIMS) if use_neck_film else []
         config = CATIConfig(
-            num_cameras=90, context_dim=64,
-            use_gps_encoding=True, use_attention=True,
+            num_cameras=90,
+            context_dim=64,
+            use_gps_encoding=True,
+            use_attention=True,
             neck_channels=neck_ch,
         )
         self.cati = CATIDetector(config).to(self.device)
@@ -306,12 +319,15 @@ class CATIPhase2Trainer:
         for idx in check_layers:
             if idx >= len(model):
                 break
+
             def _make_hook(i):
                 def hook(_, _in, output):
                     feat = output[0] if isinstance(output, tuple | list) else output
                     if isinstance(feat, torch.Tensor):
                         captured[i] = tuple(feat.shape)
+
                 return hook
+
             hooks.append(model[idx].register_forward_hook(_make_hook(idx)))
 
         dummy = torch.zeros(1, 3, 640, 640)
@@ -327,13 +343,16 @@ class CATIPhase2Trainer:
                 break
             shape = captured.get(idx, "no output captured")
             cls = type(model[idx]).__name__
-            marker = " ← neck FiLM candidate" if (
-                isinstance(shape, tuple) and len(shape) == 4
-                and shape[2] in (80, 40, 20)
-            ) else ""
+            marker = (
+                " ← neck FiLM candidate"
+                if (isinstance(shape, tuple) and len(shape) == 4 and shape[2] in (80, 40, 20))
+                else ""
+            )
             print(f"{idx:<8} {cls:<20} {shape}{marker}")
 
-        print("\nLook for 3 layers with shapes (B, 128, 80, 80), (B, 256, 40, 40), (B, 512, 20, 20)")
+        print(
+            "\nLook for 3 layers with shapes (B, 128, 80, 80), (B, 256, 40, 40), (B, 512, 20, 20)"
+        )
         print("Set those layer indices as NECK_HOOK_LAYERS in the trainer.")
         return captured
 
@@ -434,8 +453,10 @@ class CATIPhase2Trainer:
         # Build CATI module with same config as training
         neck_ch = list(YOLO11S_NECK_CHANNEL_DIMS) if use_neck_film else []
         config = CATIConfig(
-            num_cameras=90, context_dim=64,
-            use_gps_encoding=True, use_attention=True,
+            num_cameras=90,
+            context_dim=64,
+            use_gps_encoding=True,
+            use_attention=True,
             neck_channels=neck_ch,
             use_context_augmentation=False,  # no augmentation at eval
         )
@@ -448,7 +469,9 @@ class CATIPhase2Trainer:
                 logger.warning(f"CATI eval: missing keys: {missing[:5]}")
             logger.info(f"CATI eval weights loaded from {cati_weights_path}")
         else:
-            logger.warning(f"CATI weights not found at {cati_weights_path} — evaluating without conditioning")
+            logger.warning(
+                f"CATI weights not found at {cati_weights_path} — evaluating without conditioning"
+            )
         cati.eval()
 
         # Context lookup for per-image context injection
@@ -505,11 +528,12 @@ class CATIPhase2Trainer:
                             return cati.neck_film_layers[neck_stage_idx](
                                 feat, gamma, beta, _state["ctx_vec"]
                             )
+
                 return hook
 
-            hooks.append(model[layer_idx].register_forward_hook(
-                _make_hook(stage_idx, is_neck, n_idx)
-            ))
+            hooks.append(
+                model[layer_idx].register_forward_hook(_make_hook(stage_idx, is_neck, n_idx))
+            )
 
         logger.info(f"CATI eval: {len(hooks)} FiLM hooks registered")
 
@@ -614,25 +638,31 @@ class CATIPhase2Trainer:
                     for p in layer.parameters():
                         p.requires_grad_(epoch >= self.freeze_backbone_epochs)
             if (epoch + 1) % 5 == 0:
-                ckpt_path = self.save_dir / f"cati_phase2_epoch{epoch+1}.pt"
-                torch.save({
-                    "epoch": epoch,
-                    "model_state_dict": self.cati.state_dict(),
-                    "ema_state_dict": self.ema.state_dict(),
-                    "optimizer_state_dict": cati_optimizer.state_dict(),
-                    "ctx_reg_head_state_dict": self._ctx_reg_head.state_dict(),
-                }, str(ckpt_path))
+                ckpt_path = self.save_dir / f"cati_phase2_epoch{epoch + 1}.pt"
+                torch.save(
+                    {
+                        "epoch": epoch,
+                        "model_state_dict": self.cati.state_dict(),
+                        "ema_state_dict": self.ema.state_dict(),
+                        "optimizer_state_dict": cati_optimizer.state_dict(),
+                        "ctx_reg_head_state_dict": self._ctx_reg_head.state_dict(),
+                    },
+                    str(ckpt_path),
+                )
                 logger.info(f"CATI checkpoint saved: {ckpt_path}")
 
         def on_train_end(trainer_obj):
             self._remove_hooks()
             final_path = self.save_dir / "cati_phase2_final.pt"
-            torch.save({
-                "epoch": self.epochs,
-                "model_state_dict": self.cati.state_dict(),
-                "ema_state_dict": self.ema.state_dict(),
-                "ctx_reg_head_state_dict": self._ctx_reg_head.state_dict(),
-            }, str(final_path))
+            torch.save(
+                {
+                    "epoch": self.epochs,
+                    "model_state_dict": self.cati.state_dict(),
+                    "ema_state_dict": self.ema.state_dict(),
+                    "ctx_reg_head_state_dict": self._ctx_reg_head.state_dict(),
+                },
+                str(final_path),
+            )
             logger.info(f"Phase 2 complete. CATI saved to {final_path}")
 
         self.yolo.add_callback("on_train_batch_end", on_train_batch_end)

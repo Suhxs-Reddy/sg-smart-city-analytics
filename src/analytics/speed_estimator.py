@@ -41,7 +41,6 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -72,10 +71,10 @@ MAX_PLAUSIBLE_KMH = 130.0
 # Congestion band thresholds (fraction of speed limit)
 # Aligned with LTA's EMAS (Expressway Monitoring and Advisory System)
 _BAND_THRESHOLDS = [
-    (0.85, "free_flow"),       # > 85% of speed limit
-    (0.60, "light"),           # 60-85%
-    (0.35, "moderate"),        # 35-60%
-    (0.00, "heavy"),           # < 35%
+    (0.85, "free_flow"),  # > 85% of speed limit
+    (0.60, "light"),  # 60-85%
+    (0.35, "moderate"),  # 35-60%
+    (0.00, "heavy"),  # < 35%
 ]
 
 
@@ -83,32 +82,33 @@ _BAND_THRESHOLDS = [
 # Output type
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class SpeedReading:
     """Speed measurement derived from one cross-camera re-ID match."""
 
     # Camera pair
-    camera_from:  str    # upstream camera (vehicle exited here)
-    camera_to:    str    # downstream camera (vehicle entered here)
-    road:         str
-    region:       str
+    camera_from: str  # upstream camera (vehicle exited here)
+    camera_to: str  # downstream camera (vehicle entered here)
+    road: str
+    region: str
 
     # Timestamps
     timestamp_from: str  # ISO 8601 — exit time at camera_from
-    timestamp_to:   str  # ISO 8601 — entry time at camera_to
+    timestamp_to: str  # ISO 8601 — entry time at camera_to
 
     # Measurement
-    travel_time_s:  float   # seconds between cameras
-    distance_km:    float   # GPS distance between cameras
-    speed_kmh:      float   # Kalman-smoothed speed (km/h)
-    raw_speed_kmh:  float   # raw instantaneous speed before smoothing
+    travel_time_s: float  # seconds between cameras
+    distance_km: float  # GPS distance between cameras
+    speed_kmh: float  # Kalman-smoothed speed (km/h)
+    raw_speed_kmh: float  # raw instantaneous speed before smoothing
 
     # Context
-    speed_limit:    int     # legal limit for this road (km/h)
-    congestion_band: str    # free_flow / light / moderate / heavy
-    is_outlier:     bool    # True if speed outside plausible range
-    similarity:     float   # re-ID cosine similarity (confidence proxy)
-    vehicle_cls:    str
+    speed_limit: int  # legal limit for this road (km/h)
+    congestion_band: str  # free_flow / light / moderate / heavy
+    is_outlier: bool  # True if speed outside plausible range
+    similarity: float  # re-ID cosine similarity (confidence proxy)
+    vehicle_cls: str
 
     @property
     def speed_ratio(self) -> float:
@@ -117,28 +117,29 @@ class SpeedReading:
 
     def to_dict(self) -> dict:
         return {
-            "camera_from":     self.camera_from,
-            "camera_to":       self.camera_to,
-            "road":            self.road,
-            "region":          self.region,
-            "timestamp_from":  self.timestamp_from,
-            "timestamp_to":    self.timestamp_to,
-            "travel_time_s":   round(self.travel_time_s, 1),
-            "distance_km":     round(self.distance_km, 3),
-            "speed_kmh":       round(self.speed_kmh, 1),
-            "raw_speed_kmh":   round(self.raw_speed_kmh, 1),
-            "speed_limit":     self.speed_limit,
+            "camera_from": self.camera_from,
+            "camera_to": self.camera_to,
+            "road": self.road,
+            "region": self.region,
+            "timestamp_from": self.timestamp_from,
+            "timestamp_to": self.timestamp_to,
+            "travel_time_s": round(self.travel_time_s, 1),
+            "distance_km": round(self.distance_km, 3),
+            "speed_kmh": round(self.speed_kmh, 1),
+            "raw_speed_kmh": round(self.raw_speed_kmh, 1),
+            "speed_limit": self.speed_limit,
             "congestion_band": self.congestion_band,
-            "speed_ratio":     round(self.speed_ratio, 3),
-            "is_outlier":      self.is_outlier,
-            "similarity":      self.similarity,
-            "vehicle_cls":     self.vehicle_cls,
+            "speed_ratio": round(self.speed_ratio, 3),
+            "is_outlier": self.is_outlier,
+            "similarity": self.similarity,
+            "vehicle_cls": self.vehicle_cls,
         }
 
 
 # ---------------------------------------------------------------------------
 # Speed estimator
 # ---------------------------------------------------------------------------
+
 
 class _SegmentKalman:
     """
@@ -151,12 +152,12 @@ class _SegmentKalman:
     Q_noise =  25 (km/h)^2  process noise per unobserved time step.
     """
 
-    R_NOISE: float = 100.0   # measurement noise variance (km/h)^2
-    Q_NOISE: float =  25.0   # process noise per step (km/h)^2
+    R_NOISE: float = 100.0  # measurement noise variance (km/h)^2
+    Q_NOISE: float = 25.0  # process noise per step (km/h)^2
 
     def __init__(self):
-        self.speed: Optional[float] = None   # current state estimate
-        self.P: float = 200.0                # initial variance (km/h)^2
+        self.speed: float | None = None  # current state estimate
+        self.P: float = 200.0  # initial variance (km/h)^2
 
     def update(self, measurement: float, similarity: float = 1.0) -> float:
         """
@@ -219,10 +220,11 @@ class SpeedEstimator:
     def _get_network(self):
         if self._network is None:
             from src.analytics.camera_network import CameraNetwork
+
             self._network = CameraNetwork()
         return self._network
 
-    def estimate(self, match) -> Optional[SpeedReading]:
+    def estimate(self, match) -> SpeedReading | None:
         """
         Compute speed from a ReIDMatch.
 
@@ -238,7 +240,7 @@ class SpeedEstimator:
         net = self._get_network()
 
         cam_from = match.gallery_camera
-        cam_to   = match.query_camera
+        cam_to = match.query_camera
 
         # Look up the edge between these two cameras
         edge = self._find_edge(net, cam_from, cam_to)
@@ -247,9 +249,7 @@ class SpeedEstimator:
             return None
 
         # Parse timestamps
-        travel_time_s = self._travel_time_seconds(
-            match.gallery_timestamp, match.query_timestamp
-        )
+        travel_time_s = self._travel_time_seconds(match.gallery_timestamp, match.query_timestamp)
         if travel_time_s is None or travel_time_s <= 0:
             logger.warning(f"Invalid travel time between {cam_from}→{cam_to}")
             return None
@@ -257,9 +257,9 @@ class SpeedEstimator:
         # Compute raw speed
         raw_speed = edge.distance_km / (travel_time_s / 3600.0)
 
-        road   = edge.road
+        road = edge.road
         region = edge.cam_a.region
-        limit  = _SPEED_LIMITS.get(road, 80)
+        limit = _SPEED_LIMITS.get(road, 80)
         seg_key = f"{cam_from}→{cam_to}"
 
         # ── Welford outlier rejection ─────────────────────────────────────
@@ -342,14 +342,14 @@ class SpeedEstimator:
 
         profile = {}
         for road, readings in by_road.items():
-            avg   = self._weighted_harmonic_mean(readings)
+            avg = self._weighted_harmonic_mean(readings)
             limit = _SPEED_LIMITS.get(road, 80)
             profile[road] = {
-                "avg_speed_kmh":   round(avg, 1),
-                "speed_limit":     limit,
-                "speed_ratio":     round(avg / limit, 3),
+                "avg_speed_kmh": round(avg, 1),
+                "speed_limit": limit,
+                "speed_ratio": round(avg / limit, 3),
                 "congestion_band": self._congestion_band(avg, limit),
-                "num_readings":    len(readings),
+                "num_readings": len(readings),
             }
         return profile
 
@@ -377,11 +377,11 @@ class SpeedEstimator:
             return True
         s = self._welford.get(seg_key)
         if s is None or s["n"] < 5:
-            return False   # cold start — fixed band already passed
+            return False  # cold start — fixed band already passed
         variance = s["M2"] / s["n"] if s["n"] > 1 else 0.0
-        sigma = variance ** 0.5
+        sigma = variance**0.5
         if sigma < 1.0:
-            return False   # too little variance to reject
+            return False  # too little variance to reject
         return abs(speed - s["mean"]) > 3.0 * sigma
 
     @staticmethod
@@ -411,7 +411,7 @@ class SpeedEstimator:
         return None
 
     @staticmethod
-    def _travel_time_seconds(ts_from: str, ts_to: str) -> Optional[float]:
+    def _travel_time_seconds(ts_from: str, ts_to: str) -> float | None:
         try:
             t0 = datetime.fromisoformat(ts_from)
             t1 = datetime.fromisoformat(ts_to)
@@ -434,6 +434,7 @@ class SpeedEstimator:
 
 if __name__ == "__main__":
     import json
+
     from src.tracking.vehicle_reid import ReIDMatch
 
     estimator = SpeedEstimator()
@@ -444,7 +445,7 @@ if __name__ == "__main__":
     edge = estimator._find_edge(net, "1004", "1002")
     if edge:
         print(f"Edge 1004→1002: {edge.distance_km:.3f} km on {edge.road}")
-        travel_s = 22   # 22s travel at ~63 km/h
+        travel_s = 22  # 22s travel at ~63 km/h
         expected_speed = edge.distance_km / (travel_s / 3600)
         print(f"Expected speed ({travel_s}s travel): {expected_speed:.1f} km/h\n")
     else:
@@ -469,9 +470,9 @@ if __name__ == "__main__":
 
     # Add a few more readings to test road_speed_profile
     for delta_s, cam_a, cam_b in [
-        (95,  "1002", "1003"),
+        (95, "1002", "1003"),
         (110, "1003", "1703"),
-        (75,  "1701", "1702"),
+        (75, "1701", "1702"),
     ]:
         m = ReIDMatch(
             query_camera=cam_b,
@@ -485,13 +486,16 @@ if __name__ == "__main__":
         )
         # Manually set timestamps to encode travel time
         from datetime import timedelta
+
         base = datetime.fromisoformat("2026-04-10T08:30:00+08:00")
         m.gallery_timestamp = base.isoformat()
-        m.query_timestamp   = (base + timedelta(seconds=delta_s)).isoformat()
+        m.query_timestamp = (base + timedelta(seconds=delta_s)).isoformat()
         estimator.estimate(m)
 
     print("\nRoad speed profile:")
     profile = estimator.road_speed_profile()
     for road, info in profile.items():
-        print(f"  {road}: {info['avg_speed_kmh']} km/h  [{info['congestion_band']}]  "
-              f"(limit {info['speed_limit']} km/h, {info['num_readings']} readings)")
+        print(
+            f"  {road}: {info['avg_speed_kmh']} km/h  [{info['congestion_band']}]  "
+            f"(limit {info['speed_limit']} km/h, {info['num_readings']} readings)"
+        )

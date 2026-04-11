@@ -58,10 +58,10 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import ClassVar
 
 import numpy as np
 
@@ -72,52 +72,55 @@ logger = logging.getLogger(__name__)
 # Result types
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class FrameResult:
     """Full analytics result for one camera frame."""
-    camera_id:    str
-    timestamp:    str
-    road:         str
-    region:       str
-    area:         str
+
+    camera_id: str
+    timestamp: str
+    road: str
+    region: str
+    area: str
 
     # Detection
-    detections:   list[dict]          # raw detection dicts
+    detections: list[dict]  # raw detection dicts
     num_vehicles: int
 
     # Tracking
-    active_tracks: list               # confirmed Track objects
+    active_tracks: list  # confirmed Track objects
     num_active_tracks: int
 
     # Analytics
-    traffic_state: object             # TrafficState
+    traffic_state: object  # TrafficState
 
     # Speed readings produced this frame (from re-ID matches)
-    speed_readings: list              # SpeedReading objects
+    speed_readings: list  # SpeedReading objects
 
     # Timing
     inference_ms: float
-    pipeline_ms:  float
+    pipeline_ms: float
 
     def to_dict(self) -> dict:
         return {
-            "camera_id":         self.camera_id,
-            "timestamp":         self.timestamp,
-            "road":              self.road,
-            "region":            self.region,
-            "area":              self.area,
-            "num_vehicles":      self.num_vehicles,
+            "camera_id": self.camera_id,
+            "timestamp": self.timestamp,
+            "road": self.road,
+            "region": self.region,
+            "area": self.area,
+            "num_vehicles": self.num_vehicles,
             "num_active_tracks": self.num_active_tracks,
-            "traffic_state":     self.traffic_state.to_dict(),
-            "speed_readings":    [s.to_dict() for s in self.speed_readings],
-            "inference_ms":      round(self.inference_ms, 1),
-            "pipeline_ms":       round(self.pipeline_ms, 1),
+            "traffic_state": self.traffic_state.to_dict(),
+            "speed_readings": [s.to_dict() for s in self.speed_readings],
+            "inference_ms": round(self.inference_ms, 1),
+            "pipeline_ms": round(self.pipeline_ms, 1),
         }
 
 
 # ---------------------------------------------------------------------------
 # CATI detector wrapper (YOLO + FiLM hooks)
 # ---------------------------------------------------------------------------
+
 
 class _CATIInferenceDetector:
     """
@@ -129,25 +132,26 @@ class _CATIInferenceDetector:
     the hooks into each YOLO forward pass.
     """
 
-    BACKBONE_HOOK_LAYERS = [4, 6, 9]
-    NECK_HOOK_LAYERS     = [16, 19, 22]
+    BACKBONE_HOOK_LAYERS: ClassVar[list[int]] = [4, 6, 9]
+    NECK_HOOK_LAYERS: ClassVar[list[int]] = [16, 19, 22]
 
     def __init__(
         self,
         yolo_weights: str,
         cati_weights: str,
-        feature_dir:  str,
-        device:       str = "cuda",
-        conf:         float = 0.25,
+        feature_dir: str,
+        device: str = "cuda",
+        conf: float = 0.25,
         use_neck_film: bool = True,
     ):
         import torch
         from ultralytics import YOLO
-        from src.models.cati_detector import CATIConfig, CATIDetector, YOLO11S_NECK_CHANNEL_DIMS
+
+        from src.models.cati_detector import YOLO11S_NECK_CHANNEL_DIMS, CATIConfig, CATIDetector
         from src.training.train_phase2 import ContextLookup
 
-        self.device   = torch.device(device if torch.cuda.is_available() else "cpu")
-        self.conf     = conf
+        self.device = torch.device(device if torch.cuda.is_available() else "cpu")
+        self.conf = conf
         self._handles = []
         self._ctx_vec = None
 
@@ -181,10 +185,9 @@ class _CATIInferenceDetector:
 
     def _register_hooks(self, hook_layers: list[int], use_neck_film: bool):
         """Register forward hooks that apply FiLM conditioning."""
-        import torch
         model_layers = list(self._yolo.model.model)
         backbone_set = set(self.BACKBONE_HOOK_LAYERS)
-        neck_set     = set(self.NECK_HOOK_LAYERS) if use_neck_film else set()
+        neck_set = set(self.NECK_HOOK_LAYERS) if use_neck_film else set()
 
         def make_hook(layer_idx: int, is_neck: bool):
             def hook(module, input, output):
@@ -207,6 +210,7 @@ class _CATIInferenceDetector:
                     return g * output + b
                 except Exception:
                     return output
+
             return hook
 
         for i, layer in enumerate(model_layers):
@@ -236,7 +240,9 @@ class _CATIInferenceDetector:
         import torch
 
         # Build context — use lookup if available, else use provided metadata
-        meta = self._ctx_lookup.get(image_stem) if image_stem else None  # None → fallback to live metadata
+        meta = (
+            self._ctx_lookup.get(image_stem) if image_stem else None
+        )  # None → fallback to live metadata
         if meta is None:
             meta = {
                 "weather_condition": weather,
@@ -270,22 +276,21 @@ class _CATIInferenceDetector:
         )
         inference_ms = (time.perf_counter() - t0) * 1000
 
-        self._ctx_vec = None   # clear after inference
+        self._ctx_vec = None  # clear after inference
 
         # Class-specific minimum confidence floors.
         # Expressway cameras almost never contain pedestrians or cyclists —
         # person/bicycle detections at low confidence are overwhelmingly FP
         # (rain artifacts, road markings, barriers). Vehicle classes benefit
         # from the adaptive lower threshold; non-vehicle classes do not.
-        CLASS_NAMES = {0: "person", 1: "bicycle", 2: "car",
-                       3: "motorcycle", 5: "bus", 7: "truck"}
+        CLASS_NAMES = {0: "person", 1: "bicycle", 2: "car", 3: "motorcycle", 5: "bus", 7: "truck"}
         _CLS_MIN_CONF = {
-            "person":     0.45,   # expressway FP rate is very high at low conf
-            "bicycle":    0.40,   # rare on expressways; high FP from lane markings
-            "car":        adaptive_conf,
+            "person": 0.45,  # expressway FP rate is very high at low conf
+            "bicycle": 0.40,  # rare on expressways; high FP from lane markings
+            "car": adaptive_conf,
             "motorcycle": adaptive_conf,
-            "bus":        adaptive_conf,
-            "truck":      adaptive_conf,
+            "bus": adaptive_conf,
+            "truck": adaptive_conf,
         }
         detections = []
         boxes = results[0].boxes
@@ -299,11 +304,13 @@ class _CATIInferenceDetector:
                 if conf_val < _CLS_MIN_CONF.get(cls_name, adaptive_conf):
                     continue
                 x1, y1, x2, y2 = box.xyxy[0].cpu().numpy().tolist()
-                detections.append({
-                    "cls":  cls_name,
-                    "bbox": (x1, y1, x2, y2),
-                    "conf": conf_val,
-                })
+                detections.append(
+                    {
+                        "cls": cls_name,
+                        "bbox": (x1, y1, x2, y2),
+                        "conf": conf_val,
+                    }
+                )
 
         return detections, inference_ms
 
@@ -344,6 +351,7 @@ class _CATIInferenceDetector:
 # Main pipeline
 # ---------------------------------------------------------------------------
 
+
 class CATIPipeline:
     """
     End-to-end CATI inference pipeline for the Singapore expressway network.
@@ -367,20 +375,20 @@ class CATIPipeline:
 
     def __init__(
         self,
-        yolo_weights:    str,
-        cati_weights:    str,
-        feature_dir:     str,
-        device:          str   = "cuda",
-        conf:            float = 0.25,
-        use_neck_film:   bool  = True,
-        reid_thresh:     float = 0.72,
+        yolo_weights: str,
+        cati_weights: str,
+        feature_dir: str,
+        device: str = "cuda",
+        conf: float = 0.25,
+        use_neck_film: bool = True,
+        reid_thresh: float = 0.72,
         gallery_max_age: float = 180.0,
     ):
-        from src.analytics.camera_map    import CameraMap
+        from src.analytics.camera_map import CameraMap
         from src.analytics.camera_network import CameraNetwork
+        from src.analytics.speed_estimator import SpeedEstimator
         from src.analytics.traffic_analytics import TrafficAnalytics
-        from src.analytics.speed_estimator  import SpeedEstimator
-        from src.tracking.vehicle_reid      import VehicleReID, ReIDGallery
+        from src.tracking.vehicle_reid import ReIDGallery, VehicleReID
 
         self.device = device
 
@@ -403,7 +411,7 @@ class CATIPipeline:
         self._speed_est = SpeedEstimator()
 
         # Re-ID
-        self._reid    = VehicleReID(device=device)
+        self._reid = VehicleReID(device=device)
         self._gallery = ReIDGallery(
             max_age_seconds=gallery_max_age,
             similarity_thresh=reid_thresh,
@@ -420,20 +428,22 @@ class CATIPipeline:
         """Get or create a SingaporeTracker for this camera."""
         if camera_id not in self._trackers:
             from src.tracking.tracker import SingaporeTracker
+
             self._trackers[camera_id] = SingaporeTracker(camera_id=camera_id)
-            logger.info(f"Tracker created for camera {camera_id} "
-                        f"({self._trackers[camera_id].road})")
+            logger.info(
+                f"Tracker created for camera {camera_id} ({self._trackers[camera_id].road})"
+            )
         return self._trackers[camera_id]
 
     def process_frame(
         self,
-        image_bgr:   np.ndarray,
-        camera_id:   str,
-        timestamp:   str  = "",
-        weather:     str  = "unknown",
+        image_bgr: np.ndarray,
+        camera_id: str,
+        timestamp: str = "",
+        weather: str = "unknown",
         temperature: float = 28.0,
-        frame_id:    int  = 0,
-        image_stem:  str  = "",
+        frame_id: int = 0,
+        image_stem: str = "",
     ) -> FrameResult:
         """
         Process one camera frame through the full pipeline.
@@ -473,19 +483,20 @@ class CATIPipeline:
         )
 
         # 3 — Convert to tracker Detection format
-        from src.tracking.tracker import Detection as TrackerDetection
         from src.analytics.traffic_analytics import Detection as AnalyticsDetection
+        from src.tracking.tracker import Detection as TrackerDetection
 
         tracker_dets = [
-            TrackerDetection(cls=d["cls"], bbox=d["bbox"], conf=d["conf"])
-            for d in raw_dets
+            TrackerDetection(cls=d["cls"], bbox=d["bbox"], conf=d["conf"]) for d in raw_dets
         ]
 
         # 4 — Track
         tracker = self._get_tracker(camera_id)
         active_tracks = tracker.update(
-            tracker_dets, frame_id=frame_id,
-            frame_wh=(W, H), timestamp=timestamp,
+            tracker_dets,
+            frame_id=frame_id,
+            frame_wh=(W, H),
+            timestamp=timestamp,
         )
 
         # 5 — Batch re-ID embedding extraction
@@ -504,22 +515,21 @@ class CATIPipeline:
         if reid_crops:
             try:
                 embeddings = self._reid.extract_batch(reid_crops)
-                for track, emb in zip(reid_tracks, embeddings):
+                for track, emb in zip(reid_tracks, embeddings, strict=False):
                     track.embedding = emb
             except Exception:
                 # Fallback: extract individually if batch fails
-                for track, crop in zip(reid_tracks, reid_crops):
-                    try:
+                import contextlib
+
+                for track, crop in zip(reid_tracks, reid_crops, strict=False):
+                    with contextlib.suppress(Exception):
                         track.embedding = self._reid.extract(crop)
-                    except Exception:
-                        pass
 
         # 6 — Traffic analytics
         # Pass latest Kalman-smoothed speed for this road segment if available.
         # This enables HCM density-based LOS and the speed deficit congestion term.
         analytics_dets = [
-            AnalyticsDetection(cls=d["cls"], bbox=d["bbox"], conf=d["conf"])
-            for d in raw_dets
+            AnalyticsDetection(cls=d["cls"], bbox=d["bbox"], conf=d["conf"]) for d in raw_dets
         ]
         _road_profile = self._speed_est.road_speed_profile()
         _road_speed = _road_profile.get(cam_info.road, {}).get("avg_speed_kmh", 0.0)
@@ -539,6 +549,7 @@ class CATIPipeline:
         # 7 — Update re-ID gallery with tracks that have exited the frame
         speed_readings = []
         from src.tracking.tracker import FrameEdge
+
         for track in active_tracks:
             if track.embedding is None:
                 continue
@@ -622,12 +633,12 @@ class CATIPipeline:
         H, W = img.shape[:2]
 
         CLASS_COLOURS = {
-            "car":        (0, 255, 0),
-            "bus":        (0, 165, 255),
-            "truck":      (0, 0, 255),
+            "car": (0, 255, 0),
+            "bus": (0, 165, 255),
+            "truck": (0, 0, 255),
             "motorcycle": (255, 255, 0),
-            "bicycle":    (255, 128, 0),
-            "person":     (200, 200, 200),
+            "bicycle": (255, 128, 0),
+            "person": (200, 200, 200),
         }
         LOS_COLOURS = {
             "A": (0, 220, 0),
@@ -644,36 +655,41 @@ class CATIPipeline:
             colour = CLASS_COLOURS.get(track.cls, (180, 180, 180))
             cv2.rectangle(img, (x1, y1), (x2, y2), colour, 2)
             label = f"#{track.track_id} {track.cls[:3]}"
-            cv2.putText(img, label, (x1, max(y1 - 6, 12)),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, colour, 1, cv2.LINE_AA)
+            cv2.putText(
+                img,
+                label,
+                (x1, max(y1 - 6, 12)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.45,
+                colour,
+                1,
+                cv2.LINE_AA,
+            )
 
         # HUD — top-left overlay
         ts = result.traffic_state
         los_col = LOS_COLOURS.get(ts.los.value, (255, 255, 255))
-        speed_str = (
-            f"  Speed: {ts.speed_kmh:.0f}/{ts.speed_limit} km/h"
-            if ts.speed_kmh > 0 else ""
-        )
+        speed_str = f"  Speed: {ts.speed_kmh:.0f}/{ts.speed_limit} km/h" if ts.speed_kmh > 0 else ""
         hud_lines = [
             f"{result.camera_id}  {result.road}  {result.area}",
             f"Vehicles: {ts.total_vehicles}  Tracks: {result.num_active_tracks}",
-            f"Occupancy: {ts.occupancy*100:.1f}%  LOS: {ts.los.value} ({ts.los_method}){speed_str}",
+            f"Occupancy: {ts.occupancy * 100:.1f}%  LOS: {ts.los.value} ({ts.los_method}){speed_str}",
             f"Congestion: {ts.congestion_score:.2f}  Weather: {ts.weather}",
         ]
         for i, line in enumerate(hud_lines):
             y = 22 + i * 22
             cv2.rectangle(img, (0, y - 16), (min(W, 480), y + 6), (0, 0, 0), -1)
             col = los_col if i == 2 else (220, 220, 220)
-            cv2.putText(img, line, (6, y),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.50, col, 1, cv2.LINE_AA)
+            cv2.putText(img, line, (6, y), cv2.FONT_HERSHEY_SIMPLEX, 0.50, col, 1, cv2.LINE_AA)
 
         # Speed readings — bottom-left
         for i, sr in enumerate(result.speed_readings):
             y = H - 12 - i * 22
             text = f"Speed {sr.camera_from}→{sr.camera_to}: {sr.speed_kmh:.0f} km/h [{sr.congestion_band}]"
             cv2.rectangle(img, (0, y - 16), (min(W, 420), y + 4), (0, 0, 0), -1)
-            cv2.putText(img, text, (6, y),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 200), 1, cv2.LINE_AA)
+            cv2.putText(
+                img, text, (6, y), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 200), 1, cv2.LINE_AA
+            )
 
         return img
 

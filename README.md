@@ -1,3 +1,17 @@
+---
+title: CATI Smart City Analytics
+emoji: 🚦
+colorFrom: blue
+colorTo: gray
+sdk: streamlit
+sdk_version: "1.32.0"
+app_file: app.py
+hardware: t4-small
+pinned: true
+license: mit
+short_description: Real-time Singapore expressway traffic AI with CATI detection
+---
+
 # Singapore Smart City Traffic Analytics
 
 **CATI — Context-Aware Traffic Intelligence**

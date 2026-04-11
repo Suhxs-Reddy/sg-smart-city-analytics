@@ -26,9 +26,18 @@ click>=8.1.0                # CLI interface
 scipy>=1.11.0               # Statistical tests (KS test, PSI)
 matplotlib>=3.8.0           # Plotting for reports
 
-# API
+# API & Server
 fastapi>=0.108.0            # REST API server
 uvicorn>=0.25.0             # ASGI server
+httpx>=0.26.0               # Async HTTP client for server-side fetches
+requests>=2.31.0            # Sync HTTP client for Streamlit → API calls
+
+# Frontend (Streamlit)
+streamlit>=1.32.0           # Web app framework
+streamlit-folium>=0.18.0    # Folium maps in Streamlit
+streamlit-autorefresh>=1.0.1 # Auto-refresh component
+folium>=0.16.0              # Interactive maps
+plotly>=5.18.0              # Interactive charts
 
 # MLOps
 mlflow>=2.9.0               # Experiment tracking

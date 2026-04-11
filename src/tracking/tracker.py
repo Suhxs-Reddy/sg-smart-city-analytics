@@ -47,22 +47,22 @@ Usage:
 
 from __future__ import annotations
 
-import numpy as np
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import IntEnum, auto
-from typing import Optional
 
+import numpy as np
 from scipy.optimize import linear_sum_assignment
-
 
 # ---------------------------------------------------------------------------
 # Road motion axis — which pixel axis vehicles move along
 # ---------------------------------------------------------------------------
 
+
 class RoadAxis(IntEnum):
-    HORIZONTAL = auto()   # E-W roads: PIE, AYE, ECP, TPE, SLE, MCE
-    VERTICAL   = auto()   # N-S roads: CTE, BKE, KJE, KPE, NSC
-    UNKNOWN    = auto()   # Fallback — no constraint applied
+    HORIZONTAL = auto()  # E-W roads: PIE, AYE, ECP, TPE, SLE, MCE
+    VERTICAL = auto()  # N-S roads: CTE, BKE, KJE, KPE, NSC
+    UNKNOWN = auto()  # Fallback — no constraint applied
+
 
 _ROAD_AXIS: dict[str, RoadAxis] = {
     "PIE": RoadAxis.HORIZONTAL,
@@ -84,11 +84,11 @@ EDGE_ZONE_FRACTION = 0.12
 
 
 class FrameEdge(IntEnum):
-    LEFT   = auto()
-    RIGHT  = auto()
-    TOP    = auto()
+    LEFT = auto()
+    RIGHT = auto()
+    TOP = auto()
     BOTTOM = auto()
-    INTERIOR = auto()   # Not near any edge
+    INTERIOR = auto()  # Not near any edge
 
     def __str__(self):
         return self.name
@@ -105,17 +105,25 @@ def _detect_edge(
     z = EDGE_ZONE_FRACTION
 
     if axis == RoadAxis.HORIZONTAL:
-        if x1 < W * z:        return FrameEdge.LEFT
-        if x2 > W * (1 - z):  return FrameEdge.RIGHT
+        if x1 < W * z:
+            return FrameEdge.LEFT
+        if x2 > W * (1 - z):
+            return FrameEdge.RIGHT
     elif axis == RoadAxis.VERTICAL:
-        if y1 < H * z:        return FrameEdge.TOP
-        if y2 > H * (1 - z):  return FrameEdge.BOTTOM
+        if y1 < H * z:
+            return FrameEdge.TOP
+        if y2 > H * (1 - z):
+            return FrameEdge.BOTTOM
     else:
         # No axis constraint — check all edges
-        if x1 < W * z:        return FrameEdge.LEFT
-        if x2 > W * (1 - z):  return FrameEdge.RIGHT
-        if y1 < H * z:        return FrameEdge.TOP
-        if y2 > H * (1 - z):  return FrameEdge.BOTTOM
+        if x1 < W * z:
+            return FrameEdge.LEFT
+        if x2 > W * (1 - z):
+            return FrameEdge.RIGHT
+        if y1 < H * z:
+            return FrameEdge.TOP
+        if y2 > H * (1 - z):
+            return FrameEdge.BOTTOM
     return FrameEdge.INTERIOR
 
 
@@ -123,11 +131,12 @@ def _detect_edge(
 # Track state
 # ---------------------------------------------------------------------------
 
+
 class TrackState(IntEnum):
-    Tentative = 1   # Newly created — not yet confirmed
-    Confirmed = 2   # Seen enough consecutive frames
-    Lost      = 3   # Missed recently — kept alive via Kalman prediction
-    Removed   = 4   # Expired — purged from active set
+    Tentative = 1  # Newly created — not yet confirmed
+    Confirmed = 2  # Seen enough consecutive frames
+    Lost = 3  # Missed recently — kept alive via Kalman prediction
+    Removed = 4  # Expired — purged from active set
 
 
 # ---------------------------------------------------------------------------
@@ -139,6 +148,7 @@ class TrackState(IntEnum):
 #   v*     = velocities (constant-velocity model)
 # Observation: [cx, cy, a, h]
 # ---------------------------------------------------------------------------
+
 
 class KalmanFilter:
     """
@@ -162,8 +172,8 @@ class KalmanFilter:
        noisy reading from corrupting the track state.
     """
 
-    ndim = 4        # observation dimensions
-    dt   = 1.0      # time step (one frame)
+    ndim = 4  # observation dimensions
+    dt = 1.0  # time step (one frame)
 
     # How much to suppress perpendicular velocity noise (higher = stronger constraint)
     PERP_SUPPRESSION = 10.0
@@ -205,9 +215,7 @@ class KalmanFilter:
         covariance = np.diag(np.square(std, dtype=np.float32))
         return mean, covariance
 
-    def predict(
-        self, mean: np.ndarray, covariance: np.ndarray
-    ) -> tuple[np.ndarray, np.ndarray]:
+    def predict(self, mean: np.ndarray, covariance: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         std_pos = [
             self._std_weight_pos * mean[3],
             self._std_weight_pos * mean[3],
@@ -224,9 +232,9 @@ class KalmanFilter:
         # Direction constraint: suppress perpendicular velocity noise.
         # Index 4=vcx, 5=vcy in the [pos(4), vel(4)] layout.
         if self.axis == RoadAxis.HORIZONTAL:
-            std_vel[1] /= self.PERP_SUPPRESSION   # suppress vcy
+            std_vel[1] /= self.PERP_SUPPRESSION  # suppress vcy
         elif self.axis == RoadAxis.VERTICAL:
-            std_vel[0] /= self.PERP_SUPPRESSION   # suppress vcx
+            std_vel[0] /= self.PERP_SUPPRESSION  # suppress vcx
 
         Q = np.diag(np.square(std_pos + std_vel, dtype=np.float32))
 
@@ -265,9 +273,7 @@ class KalmanFilter:
         covariance = (np.eye(2 * self.ndim) - K @ self.H) @ covariance
         return mean, covariance
 
-    def project(
-        self, mean: np.ndarray, covariance: np.ndarray
-    ) -> tuple[np.ndarray, np.ndarray]:
+    def project(self, mean: np.ndarray, covariance: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         std = [
             self._std_weight_pos * mean[3],
             self._std_weight_pos * mean[3],
@@ -276,7 +282,7 @@ class KalmanFilter:
         ]
         R = np.diag(np.square(std, dtype=np.float32))
         projected_mean = self.H @ mean
-        projected_cov  = self.H @ covariance @ self.H.T + R
+        projected_cov = self.H @ covariance @ self.H.T + R
         return projected_mean, projected_cov
 
 
@@ -285,12 +291,13 @@ class KalmanFilter:
 # Compatible with traffic_analytics.Detection — mirrors its fields.
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class Detection:
-    cls:  str
-    bbox: tuple[float, float, float, float]   # (x1, y1, x2, y2) pixels
+    cls: str
+    bbox: tuple[float, float, float, float]  # (x1, y1, x2, y2) pixels
     conf: float
-    embedding: Optional[np.ndarray] = None    # from vehicle_reid.py if available
+    embedding: np.ndarray | None = None  # from vehicle_reid.py if available
 
     def to_tlwh(self) -> np.ndarray:
         x1, y1, x2, y2 = self.bbox
@@ -303,7 +310,7 @@ class Detection:
         h = y2 - y1
         cx = x1 + w / 2
         cy = y1 + h / 2
-        a  = w / max(h, 1e-6)
+        a = w / max(h, 1e-6)
         return np.array([cx, cy, a, h], dtype=np.float32)
 
 
@@ -313,43 +320,44 @@ class Detection:
 
 _track_counter = 0
 
+
 @dataclass
 class Track:
     """Single vehicle track with Kalman state, edge events, and re-ID embedding."""
 
-    track_id:  int
-    cls:       str
-    state:     TrackState
+    track_id: int
+    cls: str
+    state: TrackState
 
     # Kalman state
-    mean:       np.ndarray
+    mean: np.ndarray
     covariance: np.ndarray
 
     # Lifecycle counters
-    hits:           int = 1
-    age:            int = 1
+    hits: int = 1
+    age: int = 1
     time_since_update: int = 0
 
     # Confidence
     score: float = 0.0
 
     # Appearance embedding (updated as EMA each frame, consumed by vehicle_reid.py)
-    embedding: Optional[np.ndarray] = None
+    embedding: np.ndarray | None = None
 
     # Entry / exit zone events — set by SingaporeTracker on first/last detection.
     # Used by speed_estimator.py to timestamp cross-camera handoffs.
-    entry_edge:      FrameEdge = FrameEdge.INTERIOR
-    exit_edge:       FrameEdge = FrameEdge.INTERIOR
-    entry_frame_id:  int = 0
-    exit_frame_id:   int = 0
-    entry_timestamp: str = ""    # ISO 8601 — set by pipeline
-    exit_timestamp:  str = ""    # ISO 8601 — set by pipeline
+    entry_edge: FrameEdge = FrameEdge.INTERIOR
+    exit_edge: FrameEdge = FrameEdge.INTERIOR
+    entry_frame_id: int = 0
+    exit_frame_id: int = 0
+    entry_timestamp: str = ""  # ISO 8601 — set by pipeline
+    exit_timestamp: str = ""  # ISO 8601 — set by pipeline
 
     @property
     def bbox_tlbr(self) -> tuple[float, float, float, float]:
         """Return (x1, y1, x2, y2) from Kalman state."""
         cx, cy, a, h = self.mean[:4]
-        w  = a * h
+        w = a * h
         x1 = cx - w / 2
         y1 = cy - h / 2
         return float(x1), float(y1), float(x1 + w), float(y1 + h)
@@ -371,7 +379,7 @@ class Track:
         self.hits += 1
         self.time_since_update = 0
         self.score = det.conf
-        self.cls   = det.cls
+        self.cls = det.cls
         if det.embedding is not None:
             # Confidence-weighted EMA (StrongSORT / BoT-SORT):
             # High-confidence frame → smaller alpha → more weight on new embedding.
@@ -395,9 +403,8 @@ class Track:
 # IoU utilities
 # ---------------------------------------------------------------------------
 
-def _giou_matrix(
-    tracks: list[Track], detections: list[Detection]
-) -> np.ndarray:
+
+def _giou_matrix(tracks: list[Track], detections: list[Detection]) -> np.ndarray:
     """
     Generalised IoU cost matrix [n_tracks × n_dets]. Cost = 1 - GIoU.
 
@@ -420,20 +427,20 @@ def _giou_matrix(
             d_area = max(0, dx2 - dx1) * max(0, dy2 - dy1)
 
             # Intersection
-            ix1 = max(tx1, dx1); iy1 = max(ty1, dy1)
-            ix2 = min(tx2, dx2); iy2 = min(ty2, dy2)
+            ix1, iy1 = max(tx1, dx1), max(ty1, dy1)
+            ix2, iy2 = min(tx2, dx2), min(ty2, dy2)
             inter = max(0.0, ix2 - ix1) * max(0.0, iy2 - iy1)
             union = t_area + d_area - inter
 
             iou = inter / union if union > 1e-6 else 0.0
 
             # Smallest enclosing box
-            cx1 = min(tx1, dx1); cy1 = min(ty1, dy1)
-            cx2 = max(tx2, dx2); cy2 = max(ty2, dy2)
+            cx1, cy1 = min(tx1, dx1), min(ty1, dy1)
+            cx2, cy2 = max(tx2, dx2), max(ty2, dy2)
             c_area = max(0.0, cx2 - cx1) * max(0.0, cy2 - cy1)
 
             giou = iou - (c_area - union) / c_area if c_area > 1e-6 else iou
-            cost[i, j] = 1.0 - giou   # GIoU cost ∈ [0, 2]
+            cost[i, j] = 1.0 - giou  # GIoU cost ∈ [0, 2]
 
     return cost
 
@@ -451,7 +458,7 @@ def _hungarian(cost: np.ndarray, thresh: float):
     matched, unmatched_r, unmatched_c = [], [], []
 
     matched_set_r, matched_set_c = set(), set()
-    for r, c in zip(rows, cols):
+    for r, c in zip(rows, cols, strict=False):
         if cost[r, c] < thresh:
             matched.append((r, c))
             matched_set_r.add(r)
@@ -465,6 +472,7 @@ def _hungarian(cost: np.ndarray, thresh: float):
 # ---------------------------------------------------------------------------
 # ByteTracker
 # ---------------------------------------------------------------------------
+
 
 class ByteTracker:
     """
@@ -485,23 +493,23 @@ class ByteTracker:
 
     def __init__(
         self,
-        track_thresh:    float     = 0.45,
-        track_buffer:    int       = 30,
-        match_thresh:    float     = 0.80,
-        min_hits:        int       = 2,
-        low_conf_thresh: float     = 0.10,
-        axis:            RoadAxis  = RoadAxis.UNKNOWN,
+        track_thresh: float = 0.45,
+        track_buffer: int = 30,
+        match_thresh: float = 0.80,
+        min_hits: int = 2,
+        low_conf_thresh: float = 0.10,
+        axis: RoadAxis = RoadAxis.UNKNOWN,
     ):
-        self.track_thresh    = track_thresh
-        self.track_buffer    = track_buffer
-        self.match_thresh    = match_thresh
-        self.min_hits        = min_hits
+        self.track_thresh = track_thresh
+        self.track_buffer = track_buffer
+        self.match_thresh = match_thresh
+        self.min_hits = min_hits
         self.low_conf_thresh = low_conf_thresh
 
         self._kf: KalmanFilter = KalmanFilter(axis=axis)
         self._tracks: list[Track] = []
         self._frame_id: int = 0
-        self._next_id: int  = 1
+        self._next_id: int = 1
 
     # ------------------------------------------------------------------
     # Public API
@@ -522,7 +530,7 @@ class ByteTracker:
 
         # Split detections into high / low confidence pools
         high_dets = [d for d in detections if d.conf >= self.track_thresh]
-        low_dets  = [d for d in detections if self.low_conf_thresh <= d.conf < self.track_thresh]
+        low_dets = [d for d in detections if self.low_conf_thresh <= d.conf < self.track_thresh]
 
         # Predict all existing tracks forward one step
         for t in self._tracks:
@@ -530,7 +538,7 @@ class ByteTracker:
 
         # Active tracks = Confirmed + Lost (both eligible for matching)
         confirmed = [t for t in self._tracks if t.state == TrackState.Confirmed]
-        lost      = [t for t in self._tracks if t.state == TrackState.Lost]
+        lost = [t for t in self._tracks if t.state == TrackState.Lost]
         tentative = [t for t in self._tracks if t.state == TrackState.Tentative]
 
         # ── Step 1: match high-confidence dets → confirmed + lost tracks ──
@@ -592,7 +600,8 @@ class ByteTracker:
 
         # ── Remove expired lost tracks ──
         self._tracks = [
-            t for t in self._tracks
+            t
+            for t in self._tracks
             if not (
                 t.state == TrackState.Removed
                 or (t.state == TrackState.Lost and t.time_since_update > self.track_buffer)
@@ -605,7 +614,7 @@ class ByteTracker:
         """Reset tracker state between camera sequences."""
         self._tracks = []
         self._frame_id = 0
-        self._next_id  = 1
+        self._next_id = 1
 
     @property
     def active_tracks(self) -> list[Track]:
@@ -615,6 +624,7 @@ class ByteTracker:
 # ---------------------------------------------------------------------------
 # Singapore-aware tracker — wraps ByteTracker with camera context
 # ---------------------------------------------------------------------------
+
 
 class SingaporeTracker:
     """
@@ -638,8 +648,8 @@ class SingaporeTracker:
 
     def __init__(self, camera_id: str = "", **kwargs):
         self.camera_id = camera_id
-        self.road      = "Unknown"
-        self.axis      = RoadAxis.UNKNOWN
+        self.road = "Unknown"
+        self.axis = RoadAxis.UNKNOWN
 
         if camera_id:
             self._resolve_camera(camera_id)
@@ -650,20 +660,21 @@ class SingaporeTracker:
         """Look up road and axis from CameraNetwork."""
         try:
             from src.analytics.camera_network import CameraNetwork
+
             net = CameraNetwork()
             node = net.nodes.get(camera_id)
             if node:
                 self.road = node.road
                 self.axis = _ROAD_AXIS.get(node.road, RoadAxis.UNKNOWN)
         except Exception:
-            pass   # Graceful degradation — no axis constraint applied
+            pass  # Graceful degradation — no axis constraint applied
 
     def update(
         self,
         detections: list[Detection],
-        frame_id:   int,
-        frame_wh:   tuple[int, int] = (1920, 1080),
-        timestamp:  str = "",
+        frame_id: int,
+        frame_wh: tuple[int, int] = (1920, 1080),
+        timestamp: str = "",
     ) -> list[Track]:
         """
         Process one frame. Extends ByteTracker.update() with:
@@ -678,14 +689,14 @@ class SingaporeTracker:
 
             # Tag entry edge on first confirmed frame
             if t.hits == self._tracker.min_hits:
-                t.entry_edge      = edge
-                t.entry_frame_id  = frame_id
+                t.entry_edge = edge
+                t.entry_frame_id = frame_id
                 t.entry_timestamp = timestamp
 
             # Continuously update exit edge — last observed value persists
             if edge != FrameEdge.INTERIOR:
-                t.exit_edge      = edge
-                t.exit_frame_id  = frame_id
+                t.exit_edge = edge
+                t.exit_frame_id = frame_id
                 t.exit_timestamp = timestamp
 
         return tracks
@@ -704,6 +715,7 @@ class SingaporeTracker:
 
 if __name__ == "__main__":
     import random
+
     random.seed(42)
     np.random.seed(42)
 
@@ -719,9 +731,9 @@ if __name__ == "__main__":
     # Vehicles move ~40-60px/frame (realistic for expressway cameras at 640→1920 scale)
     # vx must be < bbox width to maintain IoU > 0 between consecutive frames
     vehicles = [
-        {"x":  50.0, "y": 400.0, "w": 120.0, "h": 70.0, "vx": 50.0, "vy":  0.5, "cls": "car"},
+        {"x": 50.0, "y": 400.0, "w": 120.0, "h": 70.0, "vx": 50.0, "vy": 0.5, "cls": "car"},
         {"x": 250.0, "y": 500.0, "w": 150.0, "h": 90.0, "vx": 40.0, "vy": -0.5, "cls": "bus"},
-        {"x": 100.0, "y": 350.0, "w":  80.0, "h": 50.0, "vx": 60.0, "vy":  0.3, "cls": "motorcycle"},
+        {"x": 100.0, "y": 350.0, "w": 80.0, "h": 50.0, "vx": 60.0, "vy": 0.3, "cls": "motorcycle"},
     ]
 
     for frame in range(1, 11):
@@ -730,18 +742,20 @@ if __name__ == "__main__":
             if 0 < v["x"] < W:
                 nx = v["x"] + random.gauss(0, 3)
                 ny = v["y"] + random.gauss(0, 2)
-                dets.append(Detection(
-                    cls=v["cls"],
-                    bbox=(nx, ny, nx + v["w"], ny + v["h"]),
-                    conf=random.uniform(0.6, 0.95),
-                ))
+                dets.append(
+                    Detection(
+                        cls=v["cls"],
+                        bbox=(nx, ny, nx + v["w"], ny + v["h"]),
+                        conf=random.uniform(0.6, 0.95),
+                    )
+                )
             v["x"] += v["vx"]
             v["y"] += v["vy"]
 
-        active = tracker.update(dets, frame_id=frame, frame_wh=(W, H),
-                                timestamp=f"2026-04-09T08:{frame:02d}:00+08:00")
+        active = tracker.update(
+            dets, frame_id=frame, frame_wh=(W, H), timestamp=f"2026-04-09T08:{frame:02d}:00+08:00"
+        )
         info = [
-            f"{t.track_id}({t.cls[:3]}) entry={t.entry_edge} exit={t.exit_edge}"
-            for t in active
+            f"{t.track_id}({t.cls[:3]}) entry={t.entry_edge} exit={t.exit_edge}" for t in active
         ]
         print(f"{frame:<6} {len(active):<8} {', '.join(info) if info else '—'}")

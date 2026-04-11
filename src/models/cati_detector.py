@@ -198,18 +198,28 @@ class CATIDetector(nn.Module):
     ) -> torch.Tensor:
         """Encode environmental metadata into a dense context vector."""
         return self.context_encoder(
-            weather_id, temperature, pm25, hour, camera_id, resolution_id,
-            camera_lat, camera_lon,
+            weather_id,
+            temperature,
+            pm25,
+            hour,
+            camera_id,
+            resolution_id,
+            camera_lat,
+            camera_lon,
         )
 
     def get_film_params(self, context: torch.Tensor) -> list[tuple[torch.Tensor, torch.Tensor]]:
         """Generate backbone FiLM (γ, β) parameters from context embedding."""
         return self.film_generator(context)
 
-    def get_neck_film_params(self, context: torch.Tensor) -> list[tuple[torch.Tensor, torch.Tensor]]:
+    def get_neck_film_params(
+        self, context: torch.Tensor
+    ) -> list[tuple[torch.Tensor, torch.Tensor]]:
         """Generate neck FiLM (γ, β) parameters from context embedding."""
         if self.neck_film_generator is None:
-            raise RuntimeError("neck_channels not set in CATIConfig — cannot generate neck FiLM params")
+            raise RuntimeError(
+                "neck_channels not set in CATIConfig — cannot generate neck FiLM params"
+            )
         return self.neck_film_generator(context)
 
     def apply_film(
@@ -250,8 +260,14 @@ class CATIDetector(nn.Module):
             List of conditioned feature maps ready for the detection head.
         """
         context = self.encode_context(
-            weather_id, temperature, pm25, hour, camera_id, resolution_id,
-            camera_lat, camera_lon,
+            weather_id,
+            temperature,
+            pm25,
+            hour,
+            camera_id,
+            resolution_id,
+            camera_lat,
+            camera_lon,
         )
         film_params = self.get_film_params(context)
         return self.apply_film(backbone_features, film_params, context)
@@ -436,6 +452,7 @@ class CATIBackboneWrapper:
         self._film_params_cache: list[tuple[torch.Tensor, torch.Tensor]] | None = None
 
         for stage_idx, layer_idx in enumerate(layer_indices):
+
             def _make_hook(s_idx: int):
                 def hook(
                     _module: nn.Module,
@@ -520,8 +537,14 @@ class CATIBackboneWrapper:
         handles: list = []
         if use_film:
             self._active_context = self._build_context_tensors(
-                camera_id, weather, temperature, pm25, hour,
-                resolution, camera_lat, camera_lon,
+                camera_id,
+                weather,
+                temperature,
+                pm25,
+                hour,
+                resolution,
+                camera_lat,
+                camera_lon,
             )
             self._film_params_cache = None
             handles = self.register_film_hooks()

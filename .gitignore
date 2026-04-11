@@ -34,7 +34,21 @@ data/dataset/
 
 # OS
 .DS_Store
+**/.DS_Store
 Thumbs.db
+
+# Cache dirs
+.pytest_cache/
+.ruff_cache/
+*.pyc
+
+# Jupyter
+.ipynb_checkpoints/
+notebooks/.ipynb_checkpoints/
+
+# HuggingFace / features cache
+features/
+*.safetensors
 
 # Logs
 *.log

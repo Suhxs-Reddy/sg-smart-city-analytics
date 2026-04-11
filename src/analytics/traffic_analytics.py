@@ -24,17 +24,16 @@ Usage:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Literal
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
 # YOLO class names as labelled in our dataset
-VEHICLE_CLASSES   = {"car", "motorcycle", "bus", "truck", "bicycle"}
-HEAVY_CLASSES     = {"bus", "truck"}
+VEHICLE_CLASSES = {"car", "motorcycle", "bus", "truck", "bicycle"}
+HEAVY_CLASSES = {"bus", "truck"}
 
 # Passenger Car Equivalent (PCE) factors — HCM 6th Ed. Chapter 12 Table 12-9.
 # PCE accounts for the disproportionate road space and headway consumed by
@@ -47,12 +46,12 @@ HEAVY_CLASSES     = {"bus", "truck"}
 #   bicycle:    0.5
 #   car:        1.0 (baseline)
 _PCE: dict[str, float] = {
-    "car":        1.0,
-    "bus":        2.5,
-    "truck":      2.0,
+    "car": 1.0,
+    "bus": 2.5,
+    "truck": 2.0,
     "motorcycle": 0.5,
-    "bicycle":    0.5,
-    "person":     0.3,   # pedestrian (rare on expressways; minimal weight)
+    "bicycle": 0.5,
+    "person": 0.3,  # pedestrian (rare on expressways; minimal weight)
 }
 
 # HCM Level of Service thresholds (occupancy-based for camera surveillance)
@@ -70,18 +69,27 @@ _LOS_THRESHOLDS = [
 # Units: passenger cars per km per lane (pc/km/ln).
 # Used when speed_kmh is available from SpeedEstimator.
 _LOS_DENSITY_THRESHOLDS = [
-    (7.0,  "A"),   # free flow, density ≤ 7  pc/km/ln
-    (11.0, "B"),   # ≤ 11
-    (16.0, "C"),   # ≤ 16
-    (22.0, "D"),   # ≤ 22
-    (28.0, "E"),   # ≤ 28  (approaching capacity)
-    (1e9,  "F"),   # > 28  (forced/breakdown flow)
+    (7.0, "A"),  # free flow, density ≤ 7  pc/km/ln
+    (11.0, "B"),  # ≤ 11
+    (16.0, "C"),  # ≤ 16
+    (22.0, "D"),  # ≤ 22
+    (28.0, "E"),  # ≤ 28  (approaching capacity)
+    (1e9, "F"),  # > 28  (forced/breakdown flow)
 ]
 
 # Singapore expressway speed limits (km/h) — same as SpeedEstimator
 _SPEED_LIMITS: dict[str, int] = {
-    "CTE": 80, "AYE": 80, "MCE": 80, "KJE": 80, "KPE": 80, "NSC": 80,
-    "PIE": 90, "ECP": 90, "TPE": 90, "BKE": 90, "SLE": 90,
+    "CTE": 80,
+    "AYE": 80,
+    "MCE": 80,
+    "KJE": 80,
+    "KPE": 80,
+    "NSC": 80,
+    "PIE": 90,
+    "ECP": 90,
+    "TPE": 90,
+    "BKE": 90,
+    "SLE": 90,
 }
 
 # Singapore expressway lane counts per road direction.
@@ -89,8 +97,8 @@ _SPEED_LIMITS: dict[str, int] = {
 # MCE is dual 2-lane; CTE/PIE are 4-lane at most stretches.
 # Used in HCM density LOS calculation: density (pc/km) / lanes → pc/km/ln.
 _ROAD_LANES: dict[str, int] = {
-    "CTE": 4,   # 3-4 lanes; use 4 (conservative)
-    "PIE": 4,   # up to 4 lanes on main carriageway
+    "CTE": 4,  # 3-4 lanes; use 4 (conservative)
+    "PIE": 4,  # up to 4 lanes on main carriageway
     "AYE": 3,
     "ECP": 3,
     "TPE": 3,
@@ -98,7 +106,7 @@ _ROAD_LANES: dict[str, int] = {
     "KJE": 3,
     "KPE": 3,
     "SLE": 3,
-    "MCE": 2,   # 2-lane tunnel
+    "MCE": 2,  # 2-lane tunnel
     "NSC": 2,
 }
 
@@ -108,10 +116,10 @@ _ROAD_LANES: dict[str, int] = {
 # During peak hours, the same occupancy represents higher operational stress
 # because capacity is fully utilised and incident recovery is slower.
 _PEAK_HOUR_RANGES = [
-    (7,  9,  1.30),   # AM peak core  (+30% congestion sensitivity)
-    (6,  10, 1.15),   # AM shoulder   (+15%)
-    (17, 20, 1.30),   # PM peak core
-    (16, 21, 1.15),   # PM shoulder
+    (7, 9, 1.30),  # AM peak core  (+30% congestion sensitivity)
+    (6, 10, 1.15),  # AM shoulder   (+15%)
+    (17, 20, 1.30),  # PM peak core
+    (16, 21, 1.15),  # PM shoulder
 ]
 
 
@@ -126,19 +134,20 @@ def _peak_multiplier(hour: int) -> float:
             best = max(best, mult)
     return best
 
+
 # Weather congestion penalty — adverse weather degrades effective capacity
 _WEATHER_PENALTY: dict[str, float] = {
-    "thundery showers":        0.15,
-    "heavy thundery showers":  0.20,
-    "moderate rain":           0.10,
-    "heavy rain":              0.15,
-    "showers":                 0.08,
-    "hazy":                    0.05,
-    "windy":                   0.03,
-    "fair":                    0.00,
-    "partly cloudy":           0.00,
-    "cloudy":                  0.02,
-    "unknown":                 0.00,
+    "thundery showers": 0.15,
+    "heavy thundery showers": 0.20,
+    "moderate rain": 0.10,
+    "heavy rain": 0.15,
+    "showers": 0.08,
+    "hazy": 0.05,
+    "windy": 0.03,
+    "fair": 0.00,
+    "partly cloudy": 0.00,
+    "cloudy": 0.02,
+    "unknown": 0.00,
 }
 
 
@@ -146,38 +155,41 @@ _WEATHER_PENALTY: dict[str, float] = {
 # Input / Output types
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class Detection:
     """Single detection from CATI detector."""
-    cls: str                        # class name: "car", "bus", etc.
+
+    cls: str  # class name: "car", "bus", etc.
     bbox: tuple[float, float, float, float]  # (x1, y1, x2, y2) in pixels
     conf: float
 
 
 class LOS(str, Enum):
-    A = "A"   # Free flow
-    B = "B"   # Reasonably free flow
-    C = "C"   # Stable flow
-    D = "D"   # Approaching unstable
-    E = "E"   # Unstable / at capacity
-    F = "F"   # Forced flow / breakdown
+    A = "A"  # Free flow
+    B = "B"  # Reasonably free flow
+    C = "C"  # Stable flow
+    D = "D"  # Approaching unstable
+    E = "E"  # Unstable / at capacity
+    F = "F"  # Forced flow / breakdown
 
 
 @dataclass
 class TrafficState:
     """Full traffic state for one camera at one timestamp."""
+
     camera_id: str
-    timestamp: str                  # ISO 8601
+    timestamp: str  # ISO 8601
 
     # Counts
     total_vehicles: int
     count_by_class: dict[str, int]  # {"car": N, "bus": N, ...}
 
     # Core metrics
-    occupancy: float                # 0.0 – 1.0
+    occupancy: float  # 0.0 – 1.0
     los: LOS
-    heavy_vehicle_ratio: float      # 0.0 – 1.0
-    congestion_score: float         # 0.0 – 1.0  (higher = worse)
+    heavy_vehicle_ratio: float  # 0.0 – 1.0
+    congestion_score: float  # 0.0 – 1.0  (higher = worse)
 
     # Context
     weather: str
@@ -192,11 +204,11 @@ class TrafficState:
     area: str = "Unknown"
 
     # Speed context (from SpeedEstimator when available, else 0.0)
-    speed_kmh:    float = 0.0   # smoothed inter-camera speed
-    speed_limit:  int   = 80    # road speed limit
-    speed_ratio:  float = 0.0   # speed_kmh / speed_limit (0 when unknown)
-    los_method:   str   = "occupancy"  # "occupancy" or "density"
-    peak_hour:    float = 1.0   # LTA EMAS peak-hour multiplier applied
+    speed_kmh: float = 0.0  # smoothed inter-camera speed
+    speed_limit: int = 80  # road speed limit
+    speed_ratio: float = 0.0  # speed_kmh / speed_limit (0 when unknown)
+    los_method: str = "occupancy"  # "occupancy" or "density"
+    peak_hour: float = 1.0  # LTA EMAS peak-hour multiplier applied
 
     @property
     def los_label(self) -> str:
@@ -212,30 +224,31 @@ class TrafficState:
 
     def to_dict(self) -> dict:
         return {
-            "camera_id":           self.camera_id,
-            "timestamp":           self.timestamp,
-            "road":                self.road,
-            "region":              self.region,
-            "area":                self.area,
-            "total_vehicles":      self.total_vehicles,
-            "count_by_class":      self.count_by_class,
-            "occupancy":           round(self.occupancy, 4),
-            "los":                 self.los.value,
-            "los_label":           self.los_label,
-            "los_method":          self.los_method,
+            "camera_id": self.camera_id,
+            "timestamp": self.timestamp,
+            "road": self.road,
+            "region": self.region,
+            "area": self.area,
+            "total_vehicles": self.total_vehicles,
+            "count_by_class": self.count_by_class,
+            "occupancy": round(self.occupancy, 4),
+            "los": self.los.value,
+            "los_label": self.los_label,
+            "los_method": self.los_method,
             "heavy_vehicle_ratio": round(self.heavy_vehicle_ratio, 4),
-            "congestion_score":    round(self.congestion_score, 4),
-            "weather":             self.weather,
-            "speed_kmh":           round(self.speed_kmh, 1),
-            "speed_limit":         self.speed_limit,
-            "speed_ratio":         round(self.speed_ratio, 3),
-            "peak_hour_mult":      round(self.peak_hour, 2),
+            "congestion_score": round(self.congestion_score, 4),
+            "weather": self.weather,
+            "speed_kmh": round(self.speed_kmh, 1),
+            "speed_limit": self.speed_limit,
+            "speed_ratio": round(self.speed_ratio, 3),
+            "peak_hour_mult": round(self.peak_hour, 2),
         }
 
 
 # ---------------------------------------------------------------------------
 # Analytics engine
 # ---------------------------------------------------------------------------
+
 
 class TrafficAnalytics:
     """
@@ -307,7 +320,10 @@ class TrafficAnalytics:
         # Primary: HCM 6th Ed. Chapter 12 density-based LOS when speed known.
         # Fallback: occupancy-based LOS (HCM 2010 camera adaptation).
         if speed_kmh > 0 and total > 0:
-            los, los_method = self._los_from_density(total, speed_ratio, roi_area, road=road), "density"
+            los, los_method = (
+                self._los_from_density(total, speed_ratio, roi_area, road=road),
+                "density",
+            )
         else:
             los, los_method = self._los_from_occupancy(occupancy), "occupancy"
 
@@ -328,6 +344,7 @@ class TrafficAnalytics:
         # Parse hour from timestamp (ISO 8601). Falls back to 12 if unavailable.
         try:
             from datetime import datetime as _dt
+
             _hour = _dt.fromisoformat(timestamp).hour if timestamp else 12
         except (ValueError, AttributeError):
             _hour = 12
@@ -345,10 +362,7 @@ class TrafficAnalytics:
         # Clamped to [0, 1] after scaling.
         speed_deficit = max(0.0, 1.0 - speed_ratio) if speed_kmh > 0 else 0.0
         raw_congestion = (
-            0.50 * occupancy
-            + 0.20 * hv_ratio * occupancy
-            + 0.15 * penalty
-            + 0.15 * speed_deficit
+            0.50 * occupancy + 0.20 * hv_ratio * occupancy + 0.15 * penalty + 0.15 * speed_deficit
         )
         congestion = min(raw_congestion * peak_mult, 1.0)
 
@@ -385,7 +399,10 @@ class TrafficAnalytics:
         return LOS.F
 
     def _los_from_density(
-        self, total_vehicles: int, speed_ratio: float, roi_area_px: int,
+        self,
+        total_vehicles: int,
+        speed_ratio: float,
+        roi_area_px: int,
         road: str = "Unknown",
     ) -> LOS:
         """
@@ -405,9 +422,9 @@ class TrafficAnalytics:
         """
         # Frame road coverage scales with frame resolution
         # Full-HD (≥1M px): ~40m; legacy (≤0.1M px): ~15m; interpolated in between
-        HD_AREA_PX   = 1920 * 1080     # 2,073,600
-        LEGACY_AREA  = 320  * 240      #    76,800
-        HD_ROAD_KM   = 0.040
+        HD_AREA_PX = 1920 * 1080  # 2,073,600
+        LEGACY_AREA = 320 * 240  #    76,800
+        HD_ROAD_KM = 0.040
         LEGACY_ROAD_KM = 0.015
         frac = min(max((roi_area_px - LEGACY_AREA) / (HD_AREA_PX - LEGACY_AREA), 0.0), 1.0)
         frame_road_km = LEGACY_ROAD_KM + frac * (HD_ROAD_KM - LEGACY_ROAD_KM)

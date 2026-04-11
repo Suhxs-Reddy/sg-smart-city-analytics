@@ -110,6 +110,7 @@ class YOLOFeatureExtractor:
             ) from e
 
         for layer_idx in self.BACKBONE_LAYERS:
+
             def _make_hook(idx: int):
                 def hook(module, _input, output):
                     # Some YOLO layers return tuples; we want the tensor output.
@@ -123,8 +124,7 @@ class YOLOFeatureExtractor:
             self._hooks.append(handle)
 
         logger.info(
-            f"Registered forward hooks on backbone layers {self.BACKBONE_LAYERS} "
-            f"(P3, P4, P5)"
+            f"Registered forward hooks on backbone layers {self.BACKBONE_LAYERS} (P3, P4, P5)"
         )
 
     def remove_hooks(self):
@@ -166,9 +166,9 @@ class YOLOFeatureExtractor:
         # YOLO letterboxes by default (maintains aspect ratio), which produces
         # variable-size feature maps that can't be batched in the collate fn.
         img = np.array(
-            Image.open(image_path).convert("RGB").resize(
-                (self.img_size, self.img_size), Image.BILINEAR
-            )
+            Image.open(image_path)
+            .convert("RGB")
+            .resize((self.img_size, self.img_size), Image.BILINEAR)
         )
 
         results = self.yolo.predict(

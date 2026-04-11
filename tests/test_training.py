@@ -74,8 +74,7 @@ def dummy_data_dir_with_features(tmp_path):
 
         # Save FP16 backbone features matching the expected format
         features = [
-            torch.randn(1, c, 80 // (2**s), 80 // (2**s)).half()
-            for s, c in enumerate(channel_dims)
+            torch.randn(1, c, 80 // (2**s), 80 // (2**s)).half() for s, c in enumerate(channel_dims)
         ]
         torch.save(features, data_dir / f"{stem}.pt")
 
@@ -143,7 +142,9 @@ class TestCATITrainer:
         config = CATIConfig(num_cameras=90, context_dim=64)
         trainer = CATITrainer(config, learning_rate=1e-3, device="cpu")
 
-        assert len(trainer.optimizer.param_groups) == 4  # context_encoder, film_gen, film_layers, prediction_head
+        assert (
+            len(trainer.optimizer.param_groups) == 4
+        )  # context_encoder, film_gen, film_layers, prediction_head
         assert trainer.optimizer.param_groups[0]["lr"] == 1e-3  # context_encoder
         assert trainer.optimizer.param_groups[2]["lr"] == 5e-4  # film_layers (0.5×)
 

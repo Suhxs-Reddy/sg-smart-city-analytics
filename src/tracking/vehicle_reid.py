@@ -44,8 +44,7 @@ Usage:
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -74,12 +73,12 @@ class VehicleReID:
         similarity_thresh: Cosine similarity threshold for a valid re-ID match.
     """
 
-    CROP_SIZE = (128, 256)    # width × height — standard re-ID input
+    CROP_SIZE = (128, 256)  # width × height — standard re-ID input
 
     def __init__(
         self,
         device: str = "cuda",
-        weights_path: Optional[str] = None,
+        weights_path: str | None = None,
         similarity_thresh: float = 0.72,
     ):
         self.device = device
@@ -87,7 +86,7 @@ class VehicleReID:
         self.similarity_thresh = similarity_thresh
         self._model = None
         self._transform = None
-        self._backend = None   # "osnet" or "mobilenet"
+        self._backend = None  # "osnet" or "mobilenet"
 
     def _load(self):
         if self._model is not None:
@@ -96,19 +95,21 @@ class VehicleReID:
         import torch
         import torchvision.transforms as T
 
-        self._transform = T.Compose([
-            T.Resize(self.CROP_SIZE[::-1]),    # (H, W)
-            T.ToTensor(),
-            T.Normalize(mean=[0.485, 0.456, 0.406],
-                        std=[0.229, 0.224, 0.225]),
-        ])
+        self._transform = T.Compose(
+            [
+                T.Resize(self.CROP_SIZE[::-1]),  # (H, W)
+                T.ToTensor(),
+                T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            ]
+        )
 
         # Try OSNet (torchreid) first
         try:
             import torchreid
+
             model = torchreid.models.build_model(
                 name="osnet_x0_25",
-                num_classes=576,    # VeRi-776 classes
+                num_classes=576,  # VeRi-776 classes
                 pretrained=True,
             )
             if self.weights_path:
@@ -121,8 +122,9 @@ class VehicleReID:
                 def __init__(self, base):
                     super().__init__()
                     self.base = base
+
                 def forward(self, x):
-                    return self.base(x)   # returns (B, 512) features in eval mode
+                    return self.base(x)  # returns (B, 512) features in eval mode
 
             self._model = _OSNetEmbed(model)
             self._backend = "osnet"
@@ -131,6 +133,7 @@ class VehicleReID:
         except (ImportError, Exception) as e:
             logger.warning(f"OSNet unavailable ({e}), falling back to MobileNetV3-Small")
             import torchvision.models as M
+
             backbone = M.mobilenet_v3_small(weights=M.MobileNet_V3_Small_Weights.DEFAULT)
             # Replace classifier with identity — use pool features
             embed_dim = backbone.classifier[0].in_features
@@ -141,6 +144,7 @@ class VehicleReID:
                     super().__init__()
                     self.base = base
                     self.proj = torch.nn.Linear(dim, EMBED_DIM, bias=False)
+
                 def forward(self, x):
                     f = self.base(x)
                     return self.proj(f)
@@ -218,26 +222,27 @@ class VehicleReID:
 # Gallery — per-camera embedding store for cross-camera matching
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class GalleryEntry:
-    track_id:   int
-    camera_id:  str
-    embedding:  np.ndarray
-    timestamp:  str        # ISO 8601 — when vehicle exited this camera
-    exit_edge:  str        # "LEFT" / "RIGHT" / "TOP" / "BOTTOM"
-    cls:        str        # vehicle class
+    track_id: int
+    camera_id: str
+    embedding: np.ndarray
+    timestamp: str  # ISO 8601 — when vehicle exited this camera
+    exit_edge: str  # "LEFT" / "RIGHT" / "TOP" / "BOTTOM"
+    cls: str  # vehicle class
 
 
 @dataclass
 class ReIDMatch:
-    query_camera:   str
+    query_camera: str
     gallery_camera: str
-    query_track_id:    int
-    gallery_track_id:  int
-    similarity:     float
-    query_timestamp:   str
+    query_track_id: int
+    gallery_track_id: int
+    similarity: float
+    query_timestamp: str
     gallery_timestamp: str
-    cls:            str
+    cls: str
 
 
 class ReIDGallery:
@@ -274,16 +279,16 @@ class ReIDGallery:
 
     def __init__(
         self,
-        max_age_seconds:        float = 180.0,
-        similarity_thresh:      float = 0.72,
-        top_k:                  int   = 3,
-        use_query_expansion:    bool  = True,
-        use_network_constraint: bool  = True,
+        max_age_seconds: float = 180.0,
+        similarity_thresh: float = 0.72,
+        top_k: int = 3,
+        use_query_expansion: bool = True,
+        use_network_constraint: bool = True,
     ):
-        self.max_age_seconds        = max_age_seconds
-        self.similarity_thresh      = similarity_thresh
-        self.top_k                  = top_k
-        self.use_query_expansion    = use_query_expansion
+        self.max_age_seconds = max_age_seconds
+        self.similarity_thresh = similarity_thresh
+        self.top_k = top_k
+        self.use_query_expansion = use_query_expansion
         self.use_network_constraint = use_network_constraint
         # camera_id → list of GalleryEntry
         self._galleries: dict[str, list[GalleryEntry]] = {}
@@ -292,12 +297,12 @@ class ReIDGallery:
 
     def add(
         self,
-        camera_id:  str,
-        track_id:   int,
-        embedding:  np.ndarray,
-        timestamp:  str,
-        exit_edge:  str = "INTERIOR",
-        cls:        str = "car",
+        camera_id: str,
+        track_id: int,
+        embedding: np.ndarray,
+        timestamp: str,
+        exit_edge: str = "INTERIOR",
+        cls: str = "car",
     ):
         """Add a vehicle embedding to the gallery for camera_id."""
         entry = GalleryEntry(
@@ -312,13 +317,13 @@ class ReIDGallery:
 
     def query(
         self,
-        query_embedding:  np.ndarray,
-        query_camera_id:  str,
-        query_timestamp:  str,
-        query_track_id:   int,
-        query_cls:        str,
+        query_embedding: np.ndarray,
+        query_camera_id: str,
+        query_timestamp: str,
+        query_track_id: int,
+        query_cls: str,
         gallery_camera_id: str,
-    ) -> Optional[ReIDMatch]:
+    ) -> ReIDMatch | None:
         """
         Query a vehicle embedding against the gallery of gallery_camera_id.
 
@@ -343,9 +348,10 @@ class ReIDGallery:
             gallery_camera_id: Camera whose gallery to search.
         """
         # ── 1. Camera network edge guard ──────────────────────────────────
-        if self.use_network_constraint:
-            if not self._edge_exists(query_camera_id, gallery_camera_id):
-                return None
+        if self.use_network_constraint and not self._edge_exists(
+            query_camera_id, gallery_camera_id
+        ):
+            return None
 
         # ── 2. Prune stale entries (edge-distance-aware TTL) ──────────────
         # TTL is computed from the GPS distance of this specific camera pair
@@ -408,9 +414,10 @@ class ReIDGallery:
         if self._network is None:
             try:
                 from src.analytics.camera_network import CameraNetwork
+
                 self._network = CameraNetwork()
             except Exception:
-                return True   # network unavailable — allow match
+                return True  # network unavailable — allow match
         for edge in self._network.edges:
             a, b = edge.cam_a.camera_id, edge.cam_b.camera_id
             if (a == cam_a and b == cam_b) or (a == cam_b and b == cam_a):
@@ -431,12 +438,13 @@ class ReIDGallery:
 
         Returns the global max_age_seconds if the network or edge is unavailable.
         """
-        MIN_AGE_S = 45.0    # floor — even adjacent cameras need some buffer
+        MIN_AGE_S = 45.0  # floor — even adjacent cameras need some buffer
         MIN_SPEED_KMH = 20.0  # worst-case congested speed for TTL calculation
 
         if self._network is None:
             try:
                 from src.analytics.camera_network import CameraNetwork
+
                 self._network = CameraNetwork()
             except Exception:
                 return self.max_age_seconds
@@ -456,6 +464,7 @@ class ReIDGallery:
         Edge-distance-aware callers pass the per-pair TTL instead.
         """
         from datetime import datetime
+
         cutoff = max_age if max_age > 0 else self.max_age_seconds
         gallery = self._galleries.get(camera_id, [])
         if not gallery:
@@ -463,18 +472,15 @@ class ReIDGallery:
         try:
             ref = datetime.fromisoformat(reference_timestamp)
             self._galleries[camera_id] = [
-                e for e in gallery
-                if (ref - datetime.fromisoformat(e.timestamp)).total_seconds()
-                <= cutoff
+                e
+                for e in gallery
+                if (ref - datetime.fromisoformat(e.timestamp)).total_seconds() <= cutoff
             ]
         except (ValueError, TypeError):
             pass
 
     def stats(self) -> dict:
-        return {
-            cam: len(entries)
-            for cam, entries in self._galleries.items()
-        }
+        return {cam: len(entries) for cam, entries in self._galleries.items()}
 
 
 # ---------------------------------------------------------------------------
@@ -526,18 +532,20 @@ if __name__ == "__main__":
         gallery_camera_id="1001",
     )
 
-    print(f"\nSame vehicle (noisy embedding):")
+    print("\nSame vehicle (noisy embedding):")
     if match_A:
-        print(f"  MATCHED — track {match_A.gallery_track_id} in cam 1001 → "
-              f"track {match_A.query_track_id} in cam 1002 "
-              f"(similarity={match_A.similarity:.4f})")
+        print(
+            f"  MATCHED — track {match_A.gallery_track_id} in cam 1001 → "
+            f"track {match_A.query_track_id} in cam 1002 "
+            f"(similarity={match_A.similarity:.4f})"
+        )
     else:
         print("  No match")
 
-    print(f"\nDifferent vehicle:")
+    print("\nDifferent vehicle:")
     if match_B:
         print(f"  MATCHED — similarity={match_B.similarity:.4f}")
     else:
-        print(f"  Correctly rejected")
+        print("  Correctly rejected")
 
     print(f"\nGallery stats: {gallery.stats()}")

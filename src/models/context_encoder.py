@@ -214,7 +214,7 @@ class ContextEncoder(nn.Module):
         # Multi-frequency sinusoidal encoding
         num_freqs = self.gps_embed_dim // 4  # each freq → 2 dims per coord
         freqs = torch.arange(num_freqs, device=lat.device, dtype=torch.float32)
-        scales = (2.0 ** freqs) * math.pi  # [pi, 2pi, 4pi, ...]
+        scales = (2.0**freqs) * math.pi  # [pi, 2pi, 4pi, ...]
 
         lat_enc = torch.cat(
             [torch.sin(lat_n.unsqueeze(1) * scales), torch.cos(lat_n.unsqueeze(1) * scales)],
