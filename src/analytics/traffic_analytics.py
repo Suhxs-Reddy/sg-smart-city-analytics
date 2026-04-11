@@ -65,6 +65,48 @@ _SPEED_LIMITS: dict[str, int] = {
     "PIE": 90, "ECP": 90, "TPE": 90, "BKE": 90, "SLE": 90,
 }
 
+# Singapore expressway lane counts per road direction.
+# Source: LTA Road Design Guidelines and OneMap road metadata.
+# MCE is dual 2-lane; CTE/PIE are 4-lane at most stretches.
+# Used in HCM density LOS calculation: density (pc/km) / lanes → pc/km/ln.
+_ROAD_LANES: dict[str, int] = {
+    "CTE": 4,   # 3-4 lanes; use 4 (conservative)
+    "PIE": 4,   # up to 4 lanes on main carriageway
+    "AYE": 3,
+    "ECP": 3,
+    "TPE": 3,
+    "BKE": 3,
+    "KJE": 3,
+    "KPE": 3,
+    "SLE": 3,
+    "MCE": 2,   # 2-lane tunnel
+    "NSC": 2,
+}
+
+# LTA EMAS peak hour schedule — Singapore.
+# AM peak: 07:00–09:30, PM peak: 17:30–20:00 (weekday).
+# Shoulder periods: ±1h around peak.
+# During peak hours, the same occupancy represents higher operational stress
+# because capacity is fully utilised and incident recovery is slower.
+_PEAK_HOUR_RANGES = [
+    (7,  9,  1.30),   # AM peak core  (+30% congestion sensitivity)
+    (6,  10, 1.15),   # AM shoulder   (+15%)
+    (17, 20, 1.30),   # PM peak core
+    (16, 21, 1.15),   # PM shoulder
+]
+
+
+def _peak_multiplier(hour: int) -> float:
+    """
+    LTA EMAS peak-hour congestion multiplier.
+    Returns 1.0 during off-peak (midnight–6am, 10am–4pm).
+    """
+    best = 1.0
+    for start, end, mult in _PEAK_HOUR_RANGES:
+        if start <= hour < end:
+            best = max(best, mult)
+    return best
+
 # Weather congestion penalty — adverse weather degrades effective capacity
 _WEATHER_PENALTY: dict[str, float] = {
     "thundery showers":        0.15,
@@ -135,6 +177,7 @@ class TrafficState:
     speed_limit:  int   = 80    # road speed limit
     speed_ratio:  float = 0.0   # speed_kmh / speed_limit (0 when unknown)
     los_method:   str   = "occupancy"  # "occupancy" or "density"
+    peak_hour:    float = 1.0   # LTA EMAS peak-hour multiplier applied
 
     @property
     def los_label(self) -> str:
@@ -167,6 +210,7 @@ class TrafficState:
             "speed_kmh":           round(self.speed_kmh, 1),
             "speed_limit":         self.speed_limit,
             "speed_ratio":         round(self.speed_ratio, 3),
+            "peak_hour_mult":      round(self.peak_hour, 2),
         }
 
 
@@ -240,7 +284,7 @@ class TrafficAnalytics:
         # Primary: HCM 6th Ed. Chapter 12 density-based LOS when speed known.
         # Fallback: occupancy-based LOS (HCM 2010 camera adaptation).
         if speed_kmh > 0 and total > 0:
-            los, los_method = self._los_from_density(total, speed_ratio, roi_area), "density"
+            los, los_method = self._los_from_density(total, speed_ratio, roi_area, road=road), "density"
         else:
             los, los_method = self._los_from_occupancy(occupancy), "occupancy"
 
@@ -257,23 +301,33 @@ class TrafficAnalytics:
                     penalty = val
                     break
 
+        # ── Peak hour multiplier (LTA EMAS) ──────────────────────────────
+        # Parse hour from timestamp (ISO 8601). Falls back to 12 if unavailable.
+        try:
+            from datetime import datetime as _dt
+            _hour = _dt.fromisoformat(timestamp).hour if timestamp else 12
+        except (ValueError, AttributeError):
+            _hour = 12
+        peak_mult = _peak_multiplier(_hour)
+
         # ── Congestion score (0-1) ────────────────────────────────────────
-        # Revised composite (Lomax et al. 1997; BPR volume-delay literature):
-        #   50% occupancy  — base spatial density proxy
-        #   20% HV effect  — heavy vehicles amplify effective lane occupancy
-        #   15% weather    — adverse weather degrades effective capacity
-        #   15% speed deficit — slow-moving traffic even at low count (incidents)
+        # Composite (Lomax et al. 1997; BPR volume-delay; LTA EMAS):
+        #   50% occupancy      — base spatial density proxy
+        #   20% HV effect      — heavy vehicles amplify effective occupancy
+        #   15% weather        — adverse weather degrades effective capacity
+        #   15% speed deficit  — slow-moving traffic (incident detection at night)
         #
-        # When speed is not available, speed_deficit=0 and the 15% weight is
-        # absorbed into occupancy implicitly (consistent with prior formula).
+        # The raw score is then multiplied by the LTA peak-hour factor so
+        # the same occupancy is classified more severely during AM/PM peak.
+        # Clamped to [0, 1] after scaling.
         speed_deficit = max(0.0, 1.0 - speed_ratio) if speed_kmh > 0 else 0.0
-        congestion = min(
+        raw_congestion = (
             0.50 * occupancy
-            + 0.20 * hv_ratio * occupancy   # HV amplifies base density
+            + 0.20 * hv_ratio * occupancy
             + 0.15 * penalty
-            + 0.15 * speed_deficit,
-            1.0,
+            + 0.15 * speed_deficit
         )
+        congestion = min(raw_congestion * peak_mult, 1.0)
 
         return TrafficState(
             camera_id=camera_id,
@@ -296,6 +350,7 @@ class TrafficAnalytics:
             speed_limit=limit,
             speed_ratio=round(speed_ratio, 3),
             los_method=los_method,
+            peak_hour=peak_mult,
         )
 
     # ------------------------------------------------------------------
@@ -307,25 +362,38 @@ class TrafficAnalytics:
         return LOS.F
 
     def _los_from_density(
-        self, total_vehicles: int, speed_ratio: float, roi_area_px: int
+        self, total_vehicles: int, speed_ratio: float, roi_area_px: int,
+        road: str = "Unknown",
     ) -> LOS:
         """
         HCM 6th Edition Chapter 12 density-based LOS for basic freeway segments.
 
-        Density proxy = vehicles / (speed_ratio × frame_coverage_km).
-        Frame coverage approximated as ~0.04 km road length for a typical
-        LTA 1920×1080 expressway camera at ~30m mounting height.
-        Assumes 3 lanes (standard Singapore expressway).
+        Density proxy (pc/km/ln) = vehicles / (speed_ratio × frame_road_km × lanes)
+
+        Frame road coverage:
+          ~40m for 1920×1080 cameras (standard LTA HD camera at 30m height).
+          ~15m for 320×240 cameras (older LTA cameras, narrower FOV).
+          Approximated from roi_area_px: smaller frame → shorter road coverage.
+
+        Lane count is looked up from _ROAD_LANES using the Singapore expressway
+        road code (MCE=2, CTE/PIE=4, most others=3). Falls back to 3 if unknown.
 
         (HCM 6th Ed. Table 12-6, Basic Freeway Segment LOS criteria)
         """
-        FRAME_ROAD_KM   = 0.04   # ~40m of road captured per 1920px frame
-        ASSUMED_LANES   = 3
+        # Frame road coverage scales with frame resolution
+        # Full-HD (≥1M px): ~40m; legacy (≤0.1M px): ~15m; interpolated in between
+        HD_AREA_PX   = 1920 * 1080     # 2,073,600
+        LEGACY_AREA  = 320  * 240      #    76,800
+        HD_ROAD_KM   = 0.040
+        LEGACY_ROAD_KM = 0.015
+        frac = min(max((roi_area_px - LEGACY_AREA) / (HD_AREA_PX - LEGACY_AREA), 0.0), 1.0)
+        frame_road_km = LEGACY_ROAD_KM + frac * (HD_ROAD_KM - LEGACY_ROAD_KM)
+
+        lanes = _ROAD_LANES.get(road, 3)
 
         # Protect against zero/degenerate speed
         effective_speed_ratio = max(speed_ratio, 0.05)
-        # As speed drops, vehicles cover less distance → density rises
-        density = total_vehicles / (effective_speed_ratio * FRAME_ROAD_KM * ASSUMED_LANES)
+        density = total_vehicles / max(effective_speed_ratio * frame_road_km * lanes, 1e-6)
 
         for threshold, grade in _LOS_DENSITY_THRESHOLDS:
             if density <= threshold:

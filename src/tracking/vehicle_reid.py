@@ -347,8 +347,12 @@ class ReIDGallery:
             if not self._edge_exists(query_camera_id, gallery_camera_id):
                 return None
 
-        # ── 2. Prune stale entries ────────────────────────────────────────
-        self._prune(gallery_camera_id, query_timestamp)
+        # ── 2. Prune stale entries (edge-distance-aware TTL) ──────────────
+        # TTL is computed from the GPS distance of this specific camera pair
+        # at worst-case congested speed — avoids over-pruning on long edges
+        # (BKE 3 km) and under-pruning on short edges (CTE 0.4 km).
+        edge_ttl = self._edge_max_age(query_camera_id, gallery_camera_id)
+        self._prune(gallery_camera_id, query_timestamp, max_age=edge_ttl)
         gallery = self._galleries.get(gallery_camera_id, [])
         if not gallery:
             return None
@@ -413,9 +417,46 @@ class ReIDGallery:
                 return True
         return False
 
-    def _prune(self, camera_id: str, reference_timestamp: str):
-        """Remove gallery entries older than max_age_seconds."""
-        from datetime import datetime, timezone
+    def _edge_max_age(self, cam_query: str, cam_gallery: str) -> float:
+        """
+        Edge-distance-aware gallery TTL (Singapore-specific).
+
+        A fixed global TTL is too aggressive for long edges (BKE ~3 km apart,
+        travel time ~120s at 90 km/h) and too lenient for short edges
+        (CTE ~0.4 km apart, travel time ~24s at 60 km/h).
+
+        Formula: max_age = max(edge_travel_time × 2.5, min_age_s)
+        The 2.5× buffer accommodates congestion (vehicles may take 2× longer)
+        plus re-ID processing latency.
+
+        Returns the global max_age_seconds if the network or edge is unavailable.
+        """
+        MIN_AGE_S = 45.0    # floor — even adjacent cameras need some buffer
+        MIN_SPEED_KMH = 20.0  # worst-case congested speed for TTL calculation
+
+        if self._network is None:
+            try:
+                from src.analytics.camera_network import CameraNetwork
+                self._network = CameraNetwork()
+            except Exception:
+                return self.max_age_seconds
+
+        for edge in self._network.edges:
+            a, b = edge.cam_a.camera_id, edge.cam_b.camera_id
+            if (a == cam_query and b == cam_gallery) or (a == cam_gallery and b == cam_query):
+                travel_s = edge.distance_km / (MIN_SPEED_KMH / 3600.0)
+                return max(travel_s * 2.5, MIN_AGE_S)
+
+        return self.max_age_seconds
+
+    def _prune(self, camera_id: str, reference_timestamp: str, max_age: float = 0.0):
+        """Remove gallery entries older than max_age seconds.
+
+        max_age defaults to self.max_age_seconds when not provided.
+        Edge-distance-aware callers pass the per-pair TTL instead.
+        """
+        from datetime import datetime
+        cutoff = max_age if max_age > 0 else self.max_age_seconds
         gallery = self._galleries.get(camera_id, [])
         if not gallery:
             return
@@ -424,7 +465,7 @@ class ReIDGallery:
             self._galleries[camera_id] = [
                 e for e in gallery
                 if (ref - datetime.fromisoformat(e.timestamp)).total_seconds()
-                <= self.max_age_seconds
+                <= cutoff
             ]
         except (ValueError, TypeError):
             pass
