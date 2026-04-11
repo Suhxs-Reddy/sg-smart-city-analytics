@@ -36,6 +36,25 @@ from typing import Literal
 VEHICLE_CLASSES   = {"car", "motorcycle", "bus", "truck", "bicycle"}
 HEAVY_CLASSES     = {"bus", "truck"}
 
+# Passenger Car Equivalent (PCE) factors — HCM 6th Ed. Chapter 12 Table 12-9.
+# PCE accounts for the disproportionate road space and headway consumed by
+# heavy vehicles relative to a standard passenger car.
+# Applied to bbox area before computing occupancy so LOS reflects effective
+# road consumption, not just pixel count.
+#   bus:        2.5 — takes 2.5× the effective lane space of a car
+#   truck:      2.0
+#   motorcycle: 0.5 — smaller footprint, gaps between lanes
+#   bicycle:    0.5
+#   car:        1.0 (baseline)
+_PCE: dict[str, float] = {
+    "car":        1.0,
+    "bus":        2.5,
+    "truck":      2.0,
+    "motorcycle": 0.5,
+    "bicycle":    0.5,
+    "person":     0.3,   # pedestrian (rare on expressways; minimal weight)
+}
+
 # HCM Level of Service thresholds (occupancy-based for camera surveillance)
 # Source: Highway Capacity Manual 2010, adapted for image-based occupancy
 _LOS_THRESHOLDS = [
@@ -269,9 +288,13 @@ class TrafficAnalytics:
 
         total = len(vehicles)
 
-        # Occupancy = sum of bbox areas / frame area
+        # PCE-weighted occupancy (HCM 6th Ed. Chapter 12, Table 12-9).
+        # Each vehicle's bbox area is multiplied by its Passenger Car Equivalent
+        # before summing, so a bus correctly contributes 2.5× more effective road
+        # space than a car of the same pixel area. This fixes LOS underestimation
+        # on frames with heavy goods vehicles common on AYE/PIE during peak hours.
         bbox_area_sum = sum(
-            (d.bbox[2] - d.bbox[0]) * (d.bbox[3] - d.bbox[1])
+            (d.bbox[2] - d.bbox[0]) * (d.bbox[3] - d.bbox[1]) * _PCE.get(d.cls, 1.0)
             for d in vehicles
         )
         occupancy = min(bbox_area_sum / roi_area, 1.0) if roi_area > 0 else 0.0
