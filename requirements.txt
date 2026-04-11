@@ -1,49 +1,43 @@
 # Singapore Smart City Analytics — Dependencies
-# Install: pip install -r requirements.txt
+# Full stack: pip install -r requirements.txt
+# HuggingFace Spaces frontend-only build uses this file directly.
 
-# Core ML & Computer Vision
-ultralytics>=8.3.0          # YOLOv11 detection + training
-torch>=2.1.0                # PyTorch backend
-torchvision>=0.16.0         # Vision utilities
-timm>=1.0.0                 # Pre-trained models (ResNet for context encoder)
+# ── Frontend (Streamlit) ────────────────────────────────────────────────────
+streamlit>=1.32.0
+streamlit-folium>=0.18.0
+streamlit-autorefresh>=1.0.1
+folium>=0.16.0
+plotly>=5.18.0
+requests>=2.31.0
+Pillow>=10.0.0
 
-# Tracking
-boxmot>=11.0.0              # Multi-object tracking (BoT-SORT, StrongSORT)
+# ── API & Server ────────────────────────────────────────────────────────────
+fastapi>=0.108.0
+uvicorn>=0.25.0
+httpx>=0.26.0
+huggingface_hub>=0.22.0
 
-# Data Collection & Processing
-aiohttp>=3.9.0              # Async HTTP for parallel camera downloads
-Pillow>=10.0.0              # Image handling
+# ── Core ML & CV (training / inference — not needed for frontend-only deploy) ─
+# ultralytics>=8.3.0
+# torch>=2.1.0
+# torchvision>=0.16.0
+# timm>=1.0.0
+# boxmot>=11.0.0
 
-# Data Analysis
-pandas>=2.1.0               # Tabular data handling
-numpy>=1.24.0               # Numerical operations
+# ── Data ────────────────────────────────────────────────────────────────────
+pandas>=2.1.0
+numpy>=1.24.0
+scipy>=1.11.0
 
-# Configuration & CLI
-pyyaml>=6.0                 # YAML config parsing
-click>=8.1.0                # CLI interface
+# ── Ingestion ───────────────────────────────────────────────────────────────
+aiohttp>=3.9.0
+pyyaml>=6.0
+click>=8.1.0
 
-# Monitoring & Visualization
-scipy>=1.11.0               # Statistical tests (KS test, PSI)
-matplotlib>=3.8.0           # Plotting for reports
+# ── MLOps ───────────────────────────────────────────────────────────────────
+mlflow>=2.9.0
 
-# API & Server
-fastapi>=0.108.0            # REST API server
-uvicorn>=0.25.0             # ASGI server
-httpx>=0.26.0               # Async HTTP client for server-side fetches
-requests>=2.31.0            # Sync HTTP client for Streamlit → API calls
-huggingface_hub>=0.22.0     # Download model weights from HF Hub at startup
-
-# Frontend (Streamlit)
-streamlit>=1.32.0           # Web app framework
-streamlit-folium>=0.18.0    # Folium maps in Streamlit
-streamlit-autorefresh>=1.0.1 # Auto-refresh component
-folium>=0.16.0              # Interactive maps
-plotly>=5.18.0              # Interactive charts
-
-# MLOps
-mlflow>=2.9.0               # Experiment tracking
-
-# Testing
-pytest>=7.4.0               # Test framework
-pytest-asyncio>=0.23.0      # Async test support
-responses>=0.24.0           # Mock HTTP responses
+# ── Testing ─────────────────────────────────────────────────────────────────
+pytest>=7.4.0
+pytest-asyncio>=0.23.0
+responses>=0.24.0

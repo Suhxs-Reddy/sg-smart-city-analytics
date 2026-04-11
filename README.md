@@ -6,10 +6,10 @@ colorTo: gray
 sdk: streamlit
 sdk_version: "1.32.0"
 app_file: app.py
-hardware: t4-small
+hardware: cpu-basic
 pinned: true
 license: mit
-short_description: Real-time Singapore expressway traffic AI with CATI detection
+short_description: Real-time Singapore expressway live traffic cameras + AI analytics
 ---
 
 # Singapore Smart City Traffic Analytics
