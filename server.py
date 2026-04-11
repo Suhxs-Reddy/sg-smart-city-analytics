@@ -370,35 +370,82 @@ app.add_middleware(
 _start_time = time.monotonic()
 
 
+def _resolve_weight(env_var: str, filename: str) -> str:
+    """
+    Resolve a model weight path from an environment variable.
+
+    Accepts two formats:
+      - HF Hub:  "username/repo-name"  (downloads to /tmp/cati_weights/)
+      - Local:   "/absolute/path/to/weights.pt"
+
+    Returns the local filesystem path to the .pt file.
+    """
+    value = os.environ.get(env_var, "").strip()
+    if not value:
+        return ""
+
+    # HF Hub format: contains "/" but no file extension → it's a repo ID
+    if "/" in value and not value.endswith(".pt") and not value.startswith("/"):
+        try:
+            from huggingface_hub import hf_hub_download
+
+            cache_dir = "/tmp/cati_weights"
+            os.makedirs(cache_dir, exist_ok=True)
+            logger.info(f"Downloading {filename} from HF Hub repo: {value}")
+            local_path = hf_hub_download(
+                repo_id=value,
+                filename=filename,
+                cache_dir=cache_dir,
+            )
+            logger.info(f"Downloaded {filename} → {local_path}")
+            return local_path
+        except Exception as e:
+            logger.error(f"HF Hub download failed for {env_var}={value}: {e}")
+            return ""
+
+    # Local path — use as-is
+    return value
+
+
 @app.on_event("startup")
 async def _startup():
     global _pipeline
 
-    yolo_weights = os.environ.get("YOLO_WEIGHTS", "")
-    cati_weights = os.environ.get("CATI_WEIGHTS", "")
-    feature_dir = os.environ.get("FEATURE_DIR", "")
-    device = os.environ.get("DEVICE", "cuda")
+    loop = asyncio.get_event_loop()
 
-    if not (yolo_weights and cati_weights and feature_dir):
-        logger.warning(
-            "YOLO_WEIGHTS / CATI_WEIGHTS / FEATURE_DIR env vars not set. "
-            "Set them before starting the server."
-        )
-    else:
+    def _load_pipeline():
+        yolo_path = _resolve_weight("YOLO_WEIGHTS", "yolo_best.pt")
+        cati_path = _resolve_weight("CATI_WEIGHTS", "cati_phase2_final.pt")
+        feature_dir = os.environ.get("FEATURE_DIR", "")
+        device = os.environ.get("DEVICE", "cuda")
+
+        if not (yolo_path and cati_path):
+            logger.warning(
+                "YOLO_WEIGHTS / CATI_WEIGHTS not set or download failed. "
+                "Running in no-model mode — inference disabled, API still serves cached data."
+            )
+            return None
+
         try:
             from src.inference import CATIPipeline
 
-            _pipeline = CATIPipeline(
-                yolo_weights=yolo_weights,
-                cati_weights=cati_weights,
-                feature_dir=feature_dir,
+            pipeline = CATIPipeline(
+                yolo_weights=yolo_path,
+                cati_weights=cati_path,
+                feature_dir=feature_dir or "",
                 device=device,
                 conf=0.25,
                 use_neck_film=True,
             )
-            logger.info("CATIPipeline loaded.")
+            logger.info("CATIPipeline loaded successfully.")
+            return pipeline
         except Exception as e:
             logger.error(f"Pipeline load failed: {e}")
+            return None
+
+    # Load weights in the executor so startup doesn't block the event loop
+    global _pipeline
+    _pipeline = await loop.run_in_executor(_executor, _load_pipeline)
 
     _bg_task = asyncio.create_task(_refresh_loop())
     _store.bg_task = _bg_task  # prevent GC of the long-lived task

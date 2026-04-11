@@ -31,6 +31,7 @@ fastapi>=0.108.0            # REST API server
 uvicorn>=0.25.0             # ASGI server
 httpx>=0.26.0               # Async HTTP client for server-side fetches
 requests>=2.31.0            # Sync HTTP client for Streamlit → API calls
+huggingface_hub>=0.22.0     # Download model weights from HF Hub at startup
 
 # Frontend (Streamlit)
 streamlit>=1.32.0           # Web app framework
