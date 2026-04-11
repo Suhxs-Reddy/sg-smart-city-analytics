@@ -146,11 +146,20 @@ class KalmanFilter:
     State: [cx, cy, a, h, vcx, vcy, va, vh]
     Observation: [cx, cy, a, h]
 
-    The process noise matrix Q is asymmetric when a road axis is specified:
-    - HORIZONTAL roads (PIE/AYE/ECP): vcy noise reduced 10× (vehicles
-      physically cannot move far perpendicular to the road in pixel space).
-    - VERTICAL roads (CTE/BKE/KJE): vcx noise reduced 10×.
-    This encodes the Singapore road geometry directly into the motion model.
+    Two Singapore-specific extensions beyond vanilla ByteTrack:
+
+    1. Direction-constrained Q (road axis):
+       Process noise matrix Q is asymmetric per road axis.
+       - HORIZONTAL roads (PIE/AYE/ECP): vcy noise reduced 10× (vehicles
+         physically cannot move far perpendicular to the road in pixel space).
+       - VERTICAL roads (CTE/BKE/KJE): vcx noise reduced 10×.
+
+    2. NSA (Noise Scale Adaptive) measurement noise (StrongSORT, Du et al. 2022):
+       Measurement noise R is scaled by (1 - conf)^2 so high-confidence
+       detections dominate the Kalman update (gain K → 1) while low-confidence
+       detections (partial occlusion under gantries) defer to the Kalman
+       prediction. This reduces jitter on clean frames and prevents a single
+       noisy reading from corrupting the track state.
     """
 
     ndim = 4        # observation dimensions
@@ -230,14 +239,23 @@ class KalmanFilter:
         mean: np.ndarray,
         covariance: np.ndarray,
         measurement: np.ndarray,
+        confidence: float = 1.0,
     ) -> tuple[np.ndarray, np.ndarray]:
+        """
+        NSA Kalman update (StrongSORT, Du et al. 2022).
+        R is scaled by (1 - confidence)^2 — high-confidence detections reduce
+        measurement noise so the filter trusts the detection over the prior.
+        Floor at 0.05 prevents numerical instability at conf ≈ 1.0.
+        """
         std = [
             self._std_weight_pos * mean[3],
             self._std_weight_pos * mean[3],
             1e-1,
             self._std_weight_pos * mean[3],
         ]
-        R = np.diag(np.square(std, dtype=np.float32))
+        # NSA: confidence-adaptive measurement noise
+        nsa_scale = max((1.0 - confidence) ** 2, 0.05)
+        R = np.diag(np.square([s * nsa_scale for s in std], dtype=np.float32))
 
         S = self.H @ covariance @ self.H.T + R
         K = covariance @ self.H.T @ np.linalg.inv(S)
@@ -346,16 +364,20 @@ class Track:
         self.time_since_update += 1
 
     def update(self, kf: KalmanFilter, det: Detection):
+        # NSA Kalman: pass detection confidence so R is scaled adaptively
         self.mean, self.covariance = kf.update(
-            self.mean, self.covariance, det.to_cxcyah()
+            self.mean, self.covariance, det.to_cxcyah(), confidence=det.conf
         )
         self.hits += 1
         self.time_since_update = 0
         self.score = det.conf
         self.cls   = det.cls
         if det.embedding is not None:
-            # Exponential moving average of appearance embedding
-            alpha = 0.9
+            # Confidence-weighted EMA (StrongSORT / BoT-SORT):
+            # High-confidence frame → smaller alpha → more weight on new embedding.
+            # Low-confidence frame → larger alpha → preserve accumulated gallery.
+            # alpha = max(0.7, 1.0 - 0.3 * conf): range [0.7, 1.0)
+            alpha = max(0.70, 1.0 - 0.30 * det.conf)
             if self.embedding is None:
                 self.embedding = det.embedding.copy()
             else:
@@ -373,25 +395,46 @@ class Track:
 # IoU utilities
 # ---------------------------------------------------------------------------
 
-def _iou_matrix(
+def _giou_matrix(
     tracks: list[Track], detections: list[Detection]
 ) -> np.ndarray:
-    """Compute IoU cost matrix [n_tracks × n_dets]. Cost = 1 - IoU."""
+    """
+    Generalised IoU cost matrix [n_tracks × n_dets]. Cost = 1 - GIoU.
+
+    GIoU (Rezatofighi et al., CVPR 2019):
+        GIoU = IoU - (C_area - union) / C_area
+    where C_area is the area of the smallest enclosing box of the two
+    rectangles. GIoU ∈ (-1, 1] and is strictly negative when boxes do not
+    overlap, providing a continuous proximity signal even at zero IoU.
+    This prevents the Hungarian algorithm from treating all non-overlapping
+    pairs as equally bad — critical for fast-moving expressway vehicles where
+    40-60px/frame displacement can reduce IoU to zero between frames.
+    """
     n, m = len(tracks), len(detections)
     cost = np.ones((n, m), dtype=np.float32)
     for i, t in enumerate(tracks):
         tx1, ty1, tx2, ty2 = t.bbox_tlbr
+        t_area = max(0, tx2 - tx1) * max(0, ty2 - ty1)
         for j, d in enumerate(detections):
             dx1, dy1, dx2, dy2 = d.bbox
+            d_area = max(0, dx2 - dx1) * max(0, dy2 - dy1)
+
+            # Intersection
             ix1 = max(tx1, dx1); iy1 = max(ty1, dy1)
             ix2 = min(tx2, dx2); iy2 = min(ty2, dy2)
-            inter = max(0, ix2 - ix1) * max(0, iy2 - iy1)
-            union = (
-                (tx2 - tx1) * (ty2 - ty1)
-                + (dx2 - dx1) * (dy2 - dy1)
-                - inter
-            )
-            cost[i, j] = 1.0 - (inter / union if union > 0 else 0.0)
+            inter = max(0.0, ix2 - ix1) * max(0.0, iy2 - iy1)
+            union = t_area + d_area - inter
+
+            iou = inter / union if union > 1e-6 else 0.0
+
+            # Smallest enclosing box
+            cx1 = min(tx1, dx1); cy1 = min(ty1, dy1)
+            cx2 = max(tx2, dx2); cy2 = max(ty2, dy2)
+            c_area = max(0.0, cx2 - cx1) * max(0.0, cy2 - cy1)
+
+            giou = iou - (c_area - union) / c_area if c_area > 1e-6 else iou
+            cost[i, j] = 1.0 - giou   # GIoU cost ∈ [0, 2]
+
     return cost
 
 
@@ -492,7 +535,7 @@ class ByteTracker:
 
         # ── Step 1: match high-confidence dets → confirmed + lost tracks ──
         all_active = confirmed + lost
-        cost1 = _iou_matrix(all_active, high_dets)
+        cost1 = _giou_matrix(all_active, high_dets)
         matched1, unmatched_tracks1, unmatched_dets1 = _hungarian(cost1, self.match_thresh)
 
         for ti, di in matched1:
@@ -503,7 +546,7 @@ class ByteTracker:
         unmatched_active = [all_active[i] for i in unmatched_tracks1]
 
         # ── Step 2: match low-confidence dets → remaining unmatched tracks ──
-        cost2 = _iou_matrix(unmatched_active, low_dets)
+        cost2 = _giou_matrix(unmatched_active, low_dets)
         matched2, unmatched_tracks2, _ = _hungarian(cost2, self.match_thresh)
 
         for ti, di in matched2:
@@ -517,7 +560,7 @@ class ByteTracker:
 
         # ── Step 3: match remaining high-conf dets → tentative tracks ──
         remaining_high = [high_dets[i] for i in unmatched_dets1]
-        cost3 = _iou_matrix(tentative, remaining_high)
+        cost3 = _giou_matrix(tentative, remaining_high)
         matched3, unmatched_tent, unmatched_new = _hungarian(cost3, self.match_thresh)
 
         for ti, di in matched3:

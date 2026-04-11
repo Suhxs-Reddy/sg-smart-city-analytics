@@ -451,10 +451,15 @@ class CATIPipeline:
                     pass
 
         # 6 — Traffic analytics
+        # Pass latest Kalman-smoothed speed for this road segment if available.
+        # This enables HCM density-based LOS and the speed deficit congestion term.
         analytics_dets = [
             AnalyticsDetection(cls=d["cls"], bbox=d["bbox"], conf=d["conf"])
             for d in raw_dets
         ]
+        _road_profile = self._speed_est.road_speed_profile()
+        _road_speed = _road_profile.get(cam_info.road, {}).get("avg_speed_kmh", 0.0)
+
         traffic_state = self._analytics.compute(
             detections=analytics_dets,
             frame_wh=(W, H),
@@ -464,6 +469,7 @@ class CATIPipeline:
             road=cam_info.road,
             region=cam_info.region,
             area=cam_info.area,
+            speed_kmh=_road_speed,
         )
 
         # 7 — Update re-ID gallery with tracks that have exited the frame
@@ -580,10 +586,14 @@ class CATIPipeline:
         # HUD — top-left overlay
         ts = result.traffic_state
         los_col = LOS_COLOURS.get(ts.los.value, (255, 255, 255))
+        speed_str = (
+            f"  Speed: {ts.speed_kmh:.0f}/{ts.speed_limit} km/h"
+            if ts.speed_kmh > 0 else ""
+        )
         hud_lines = [
             f"{result.camera_id}  {result.road}  {result.area}",
             f"Vehicles: {ts.total_vehicles}  Tracks: {result.num_active_tracks}",
-            f"Occupancy: {ts.occupancy * 100:.1f}%  LOS: {ts.los.value}  ({ts.los_label})",
+            f"Occupancy: {ts.occupancy*100:.1f}%  LOS: {ts.los.value} ({ts.los_method}){speed_str}",
             f"Congestion: {ts.congestion_score:.2f}  Weather: {ts.weather}",
         ]
         for i, line in enumerate(hud_lines):

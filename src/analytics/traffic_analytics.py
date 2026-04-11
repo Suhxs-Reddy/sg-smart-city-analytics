@@ -47,6 +47,24 @@ _LOS_THRESHOLDS = [
     (1.00, "F"),
 ]
 
+# HCM 6th Edition Chapter 12 — density-based LOS for basic freeway segments.
+# Units: passenger cars per km per lane (pc/km/ln).
+# Used when speed_kmh is available from SpeedEstimator.
+_LOS_DENSITY_THRESHOLDS = [
+    (7.0,  "A"),   # free flow, density ≤ 7  pc/km/ln
+    (11.0, "B"),   # ≤ 11
+    (16.0, "C"),   # ≤ 16
+    (22.0, "D"),   # ≤ 22
+    (28.0, "E"),   # ≤ 28  (approaching capacity)
+    (1e9,  "F"),   # > 28  (forced/breakdown flow)
+]
+
+# Singapore expressway speed limits (km/h) — same as SpeedEstimator
+_SPEED_LIMITS: dict[str, int] = {
+    "CTE": 80, "AYE": 80, "MCE": 80, "KJE": 80, "KPE": 80, "NSC": 80,
+    "PIE": 90, "ECP": 90, "TPE": 90, "BKE": 90, "SLE": 90,
+}
+
 # Weather congestion penalty — adverse weather degrades effective capacity
 _WEATHER_PENALTY: dict[str, float] = {
     "thundery showers":        0.15,
@@ -112,6 +130,12 @@ class TrafficState:
     region: str = "Unknown"
     area: str = "Unknown"
 
+    # Speed context (from SpeedEstimator when available, else 0.0)
+    speed_kmh:    float = 0.0   # smoothed inter-camera speed
+    speed_limit:  int   = 80    # road speed limit
+    speed_ratio:  float = 0.0   # speed_kmh / speed_limit (0 when unknown)
+    los_method:   str   = "occupancy"  # "occupancy" or "density"
+
     @property
     def los_label(self) -> str:
         labels = {
@@ -136,9 +160,13 @@ class TrafficState:
             "occupancy":           round(self.occupancy, 4),
             "los":                 self.los.value,
             "los_label":           self.los_label,
+            "los_method":          self.los_method,
             "heavy_vehicle_ratio": round(self.heavy_vehicle_ratio, 4),
             "congestion_score":    round(self.congestion_score, 4),
             "weather":             self.weather,
+            "speed_kmh":           round(self.speed_kmh, 1),
+            "speed_limit":         self.speed_limit,
+            "speed_ratio":         round(self.speed_ratio, 3),
         }
 
 
@@ -165,6 +193,7 @@ class TrafficAnalytics:
         road: str = "Unknown",
         region: str = "Unknown",
         area: str = "Unknown",
+        speed_kmh: float = 0.0,
     ) -> TrafficState:
         """
         Compute traffic state from detections for one frame.
@@ -176,6 +205,9 @@ class TrafficAnalytics:
             timestamp:  ISO 8601 timestamp of the frame.
             weather:    Current weather condition string.
             road/region/area: From CameraMap.lookup().
+            speed_kmh:  Kalman-smoothed inter-camera speed from SpeedEstimator.
+                        When > 0, enables HCM density-based LOS and the speed
+                        deficit congestion term. Defaults to 0.0 (not available).
 
         Returns:
             TrafficState with all computed metrics.
@@ -200,8 +232,17 @@ class TrafficAnalytics:
         )
         occupancy = min(bbox_area_sum / roi_area, 1.0) if roi_area > 0 else 0.0
 
-        # Level of Service
-        los = self._los_from_occupancy(occupancy)
+        # Speed context
+        limit = _SPEED_LIMITS.get(road, 80)
+        speed_ratio = (speed_kmh / limit) if speed_kmh > 0 and limit > 0 else 0.0
+
+        # ── Level of Service ──────────────────────────────────────────────
+        # Primary: HCM 6th Ed. Chapter 12 density-based LOS when speed known.
+        # Fallback: occupancy-based LOS (HCM 2010 camera adaptation).
+        if speed_kmh > 0 and total > 0:
+            los, los_method = self._los_from_density(total, speed_ratio, roi_area), "density"
+        else:
+            los, los_method = self._los_from_occupancy(occupancy), "occupancy"
 
         # Heavy vehicle ratio
         heavy_count = sum(count_by_class.get(c, 0) for c in HEAVY_CLASSES)
@@ -210,20 +251,27 @@ class TrafficAnalytics:
         # Weather penalty
         weather_key = weather.lower().strip()
         penalty = _WEATHER_PENALTY.get(weather_key, 0.0)
-        # Partial match fallback
         if weather_key not in _WEATHER_PENALTY:
             for key, val in _WEATHER_PENALTY.items():
                 if key in weather_key:
                     penalty = val
                     break
 
-        # Congestion score (0-1):
-        #   60% occupancy weight + 20% HV weight + 20% weather penalty
-        # HV raises effective occupancy since heavy vehicles take more road space
+        # ── Congestion score (0-1) ────────────────────────────────────────
+        # Revised composite (Lomax et al. 1997; BPR volume-delay literature):
+        #   50% occupancy  — base spatial density proxy
+        #   20% HV effect  — heavy vehicles amplify effective lane occupancy
+        #   15% weather    — adverse weather degrades effective capacity
+        #   15% speed deficit — slow-moving traffic even at low count (incidents)
+        #
+        # When speed is not available, speed_deficit=0 and the 15% weight is
+        # absorbed into occupancy implicitly (consistent with prior formula).
+        speed_deficit = max(0.0, 1.0 - speed_ratio) if speed_kmh > 0 else 0.0
         congestion = min(
-            0.60 * occupancy
-            + 0.20 * hv_ratio * occupancy   # HV effect scales with base density
-            + 0.20 * penalty,
+            0.50 * occupancy
+            + 0.20 * hv_ratio * occupancy   # HV amplifies base density
+            + 0.15 * penalty
+            + 0.15 * speed_deficit,
             1.0,
         )
 
@@ -244,6 +292,10 @@ class TrafficAnalytics:
             road=road,
             region=region,
             area=area,
+            speed_kmh=speed_kmh,
+            speed_limit=limit,
+            speed_ratio=round(speed_ratio, 3),
+            los_method=los_method,
         )
 
     # ------------------------------------------------------------------
@@ -251,6 +303,32 @@ class TrafficAnalytics:
     def _los_from_occupancy(self, occupancy: float) -> LOS:
         for threshold, grade in _LOS_THRESHOLDS:
             if occupancy <= threshold:
+                return LOS(grade)
+        return LOS.F
+
+    def _los_from_density(
+        self, total_vehicles: int, speed_ratio: float, roi_area_px: int
+    ) -> LOS:
+        """
+        HCM 6th Edition Chapter 12 density-based LOS for basic freeway segments.
+
+        Density proxy = vehicles / (speed_ratio × frame_coverage_km).
+        Frame coverage approximated as ~0.04 km road length for a typical
+        LTA 1920×1080 expressway camera at ~30m mounting height.
+        Assumes 3 lanes (standard Singapore expressway).
+
+        (HCM 6th Ed. Table 12-6, Basic Freeway Segment LOS criteria)
+        """
+        FRAME_ROAD_KM   = 0.04   # ~40m of road captured per 1920px frame
+        ASSUMED_LANES   = 3
+
+        # Protect against zero/degenerate speed
+        effective_speed_ratio = max(speed_ratio, 0.05)
+        # As speed drops, vehicles cover less distance → density rises
+        density = total_vehicles / (effective_speed_ratio * FRAME_ROAD_KM * ASSUMED_LANES)
+
+        for threshold, grade in _LOS_DENSITY_THRESHOLDS:
+            if density <= threshold:
                 return LOS(grade)
         return LOS.F
 

@@ -100,7 +100,8 @@ class SpeedReading:
     # Measurement
     travel_time_s:  float   # seconds between cameras
     distance_km:    float   # GPS distance between cameras
-    speed_kmh:      float   # computed speed
+    speed_kmh:      float   # Kalman-smoothed speed (km/h)
+    raw_speed_kmh:  float   # raw instantaneous speed before smoothing
 
     # Context
     speed_limit:    int     # legal limit for this road (km/h)
@@ -125,6 +126,7 @@ class SpeedReading:
             "travel_time_s":   round(self.travel_time_s, 1),
             "distance_km":     round(self.distance_km, 3),
             "speed_kmh":       round(self.speed_kmh, 1),
+            "raw_speed_kmh":   round(self.raw_speed_kmh, 1),
             "speed_limit":     self.speed_limit,
             "congestion_band": self.congestion_band,
             "speed_ratio":     round(self.speed_ratio, 3),
@@ -138,16 +140,70 @@ class SpeedReading:
 # Speed estimator
 # ---------------------------------------------------------------------------
 
+class _SegmentKalman:
+    """
+    1D Kalman smoother for per-segment speed estimation.
+
+    State: speed (km/h).  Scalar, constant-velocity model.
+    Adapted from Coifman & Dhoorjaty (2004, TRR) for camera-based speed.
+
+    R_noise = 100 (km/h)^2  ≈ ±10 km/h measurement uncertainty per match.
+    Q_noise =  25 (km/h)^2  process noise per unobserved time step.
+    """
+
+    R_NOISE: float = 100.0   # measurement noise variance (km/h)^2
+    Q_NOISE: float =  25.0   # process noise per step (km/h)^2
+
+    def __init__(self):
+        self.speed: Optional[float] = None   # current state estimate
+        self.P: float = 200.0                # initial variance (km/h)^2
+
+    def update(self, measurement: float, similarity: float = 1.0) -> float:
+        """
+        Kalman update with similarity-weighted measurement noise.
+        High re-ID similarity → lower effective R → more trust in measurement.
+        """
+        # Scale R inversely by similarity confidence (high sim = lower noise)
+        r_eff = self.R_NOISE / max(similarity, 0.1)
+
+        if self.speed is None:
+            self.speed = measurement
+            return self.speed
+
+        # Predict step: add process noise
+        self.P += self.Q_NOISE
+
+        # Update step
+        K = self.P / (self.P + r_eff)
+        self.speed = self.speed + K * (measurement - self.speed)
+        self.P = (1.0 - K) * self.P
+        return self.speed
+
+
 class SpeedEstimator:
     """
     Computes inter-camera vehicle speed from re-ID matches.
 
-    Maintains a rolling buffer of recent speed readings per road segment
-    for smoothed per-road speed profiles.
+    Three literature-backed improvements over baseline averaging:
+
+    1. Per-segment 1D Kalman smoother (_SegmentKalman): reduces reading-to-
+       reading variance. Measurement noise R is scaled by re-ID similarity so
+       high-confidence matches dominate the state update.
+       (Coifman & Dhoorjaty 2004, Transportation Research Record)
+
+    2. Similarity-weighted harmonic mean for road-level profile: harmonic mean
+       is the correct average for rates/speeds (preserves flow interpretation).
+       Weights are re-ID cosine similarity scores.
+       (HCM 6th Ed. Chapter 3; Wardrop 1952)
+
+    3. Welford online outlier rejection: per-segment running mean and variance
+       are maintained via Welford's algorithm. For segments with ≥5 readings,
+       outliers are flagged when |speed - μ| > 3σ (Mahalanobis distance > 3
+       in 1D Gaussian case). Falls back to fixed [10, 130] km/h for cold start.
+       (Coifman 2001, Transportation Research Part C; Mahalanobis 1936)
 
     Args:
-        buffer_size: Number of recent readings to keep per road segment
-                     for rolling average speed computation.
+        buffer_size: Number of recent readings to keep per road segment.
     """
 
     def __init__(self, buffer_size: int = 20):
@@ -155,6 +211,10 @@ class SpeedEstimator:
         self._network = None
         # road_segment → list of recent SpeedReadings (rolling buffer)
         self._buffer: dict[str, list[SpeedReading]] = {}
+        # road_segment → 1D Kalman smoother
+        self._kalman: dict[str, _SegmentKalman] = {}
+        # road_segment → Welford online statistics {n, mean, M2}
+        self._welford: dict[str, dict] = {}
 
     def _get_network(self):
         if self._network is None:
@@ -194,14 +254,31 @@ class SpeedEstimator:
             logger.warning(f"Invalid travel time between {cam_from}→{cam_to}")
             return None
 
-        # Compute speed
-        speed_kmh = edge.distance_km / (travel_time_s / 3600.0)
-        is_outlier = not (MIN_PLAUSIBLE_KMH <= speed_kmh <= MAX_PLAUSIBLE_KMH)
+        # Compute raw speed
+        raw_speed = edge.distance_km / (travel_time_s / 3600.0)
 
         road   = edge.road
         region = edge.cam_a.region
         limit  = _SPEED_LIMITS.get(road, 80)
-        band   = self._congestion_band(speed_kmh, limit)
+        seg_key = f"{cam_from}→{cam_to}"
+
+        # ── Welford outlier rejection ─────────────────────────────────────
+        # Cold start (< 5 readings): fixed-band check.
+        # Warm (≥ 5): flag if |speed - μ| > 3σ  (Mahalanobis distance > 3).
+        # (Coifman 2001, Transportation Research Part C)
+        is_outlier = self._is_outlier(seg_key, raw_speed)
+
+        # ── Kalman smoothing ──────────────────────────────────────────────
+        # Only smooth non-outlier readings. Outliers still stored (is_outlier=True)
+        # but Kalman state is not updated.
+        if not is_outlier:
+            kf = self._kalman.setdefault(seg_key, _SegmentKalman())
+            speed_kmh = kf.update(raw_speed, similarity=match.similarity)
+            self._welford_update(seg_key, raw_speed)
+        else:
+            speed_kmh = raw_speed
+
+        band = self._congestion_band(speed_kmh, limit)
 
         reading = SpeedReading(
             camera_from=cam_from,
@@ -213,6 +290,7 @@ class SpeedEstimator:
             travel_time_s=round(travel_time_s, 1),
             distance_km=edge.distance_km,
             speed_kmh=round(speed_kmh, 1),
+            raw_speed_kmh=round(raw_speed, 1),
             speed_limit=limit,
             congestion_band=band,
             is_outlier=is_outlier,
@@ -221,7 +299,6 @@ class SpeedEstimator:
         )
 
         if not is_outlier:
-            seg_key = f"{cam_from}→{cam_to}"
             buf = self._buffer.setdefault(seg_key, [])
             buf.append(reading)
             if len(buf) > self.buffer_size:
@@ -251,8 +328,12 @@ class SpeedEstimator:
 
     def road_speed_profile(self) -> dict[str, dict]:
         """
-        Per-road speed summary — avg speed, band, and number of readings.
-        Used by network_summary() and the REST API.
+        Per-road speed summary using similarity-weighted harmonic mean.
+
+        Harmonic mean is the correct average for speeds/rates (preserves the
+        flow-rate interpretation). Each reading is weighted by its re-ID
+        similarity score as an inverse-variance proxy.
+        (HCM 6th Ed. Chapter 3; Wardrop 1952)
         """
         by_road: dict[str, list[SpeedReading]] = {}
         for readings in self._buffer.values():
@@ -261,9 +342,8 @@ class SpeedEstimator:
 
         profile = {}
         for road, readings in by_road.items():
-            speeds = [r.speed_kmh for r in readings]
-            avg    = sum(speeds) / len(speeds)
-            limit  = _SPEED_LIMITS.get(road, 80)
+            avg   = self._weighted_harmonic_mean(readings)
+            limit = _SPEED_LIMITS.get(road, 80)
             profile[road] = {
                 "avg_speed_kmh":   round(avg, 1),
                 "speed_limit":     limit,
@@ -272,6 +352,53 @@ class SpeedEstimator:
                 "num_readings":    len(readings),
             }
         return profile
+
+    # ------------------------------------------------------------------
+    # Welford outlier rejection helpers
+    # ------------------------------------------------------------------
+
+    def _welford_update(self, seg_key: str, value: float):
+        """Welford's online algorithm for running mean and variance."""
+        s = self._welford.setdefault(seg_key, {"n": 0, "mean": 0.0, "M2": 0.0})
+        s["n"] += 1
+        delta = value - s["mean"]
+        s["mean"] += delta / s["n"]
+        delta2 = value - s["mean"]
+        s["M2"] += delta * delta2
+
+    def _is_outlier(self, seg_key: str, speed: float) -> bool:
+        """
+        Mahalanobis-distance outlier test.
+        Cold start (< 5 readings): fixed [MIN_PLAUSIBLE, MAX_PLAUSIBLE] band.
+        Warm: flag if |speed - μ| > 3σ  (3-sigma rule, 1D Gaussian).
+        """
+        # Fixed-band sanity check always applies
+        if not (MIN_PLAUSIBLE_KMH <= speed <= MAX_PLAUSIBLE_KMH):
+            return True
+        s = self._welford.get(seg_key)
+        if s is None or s["n"] < 5:
+            return False   # cold start — fixed band already passed
+        variance = s["M2"] / s["n"] if s["n"] > 1 else 0.0
+        sigma = variance ** 0.5
+        if sigma < 1.0:
+            return False   # too little variance to reject
+        return abs(speed - s["mean"]) > 3.0 * sigma
+
+    @staticmethod
+    def _weighted_harmonic_mean(readings: list[SpeedReading]) -> float:
+        """
+        Similarity-weighted harmonic mean of speeds.
+        H = Σw_i / Σ(w_i / v_i)  where w_i = similarity score.
+        Falls back to arithmetic mean if any speed is near zero.
+        """
+        if not readings:
+            return 0.0
+        try:
+            w_sum = sum(r.similarity for r in readings)
+            wv_sum = sum(r.similarity / max(r.speed_kmh, 1e-3) for r in readings)
+            return w_sum / wv_sum if wv_sum > 1e-9 else 0.0
+        except ZeroDivisionError:
+            return sum(r.speed_kmh for r in readings) / len(readings)
 
     # ------------------------------------------------------------------
 
