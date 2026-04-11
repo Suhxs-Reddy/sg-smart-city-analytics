@@ -1,0 +1,117 @@
+# CATI Training Configuration
+# Context-Aware Traffic Intelligence — Singapore Smart City
+
+# =============================================================================
+# Model Architecture
+# =============================================================================
+model:
+  name: "CATI-YOLOv11s"
+  backbone: "yolo11s.pt"           # Base YOLO weights (COCO pretrained)
+  num_cameras: 90                   # Singapore LTA camera network
+  context_dim: 64                   # Context embedding dimension
+  camera_embed_dim: 16              # Per-camera learned embedding
+  backbone_channels: [128, 256, 512]  # YOLOv11s P3/P4/P5 channels
+  num_classes: 6                    # car, motorcycle, bus, truck, person, bicycle
+  img_size: 640
+
+# =============================================================================
+# Training — Phase 1: Context Module (Backbone Frozen)
+# =============================================================================
+phase1:
+  epochs: 50
+  batch_size: 16
+  learning_rate: 1.0e-3
+  weight_decay: 1.0e-4
+  scheduler: "cosine"
+  warmup_epochs: 5
+  freeze_backbone: true
+  description: >
+    Train only the ContextEncoder + FiLMGenerator + FiLM layers.
+    YOLO backbone weights are frozen. This teaches the context pathway
+    to produce meaningful modulations based on environmental metadata.
+
+# =============================================================================
+# Training — Phase 2: End-to-End Fine-tuning
+# =============================================================================
+phase2:
+  epochs: 30
+  batch_size: 8                     # Smaller batch — full model in memory
+  learning_rate_backbone: 1.0e-4    # Lower LR for pretrained backbone
+  learning_rate_context: 1.0e-3     # Higher LR for context modules
+  weight_decay: 1.0e-4
+  scheduler: "cosine"
+  unfreeze_backbone: true
+  description: >
+    Jointly optimize YOLO backbone + context modules. Backbone uses
+    lower learning rate to preserve pretrained features.
+
+# =============================================================================
+# Data
+# =============================================================================
+data:
+  train_dir: "data/features/train"
+  val_dir: "data/features/val"
+  test_dir: "data/features/test"
+  # External datasets for baseline training
+  ua_detrac:
+    url: "https://universe.roboflow.com/roboflow-100/vehicles-q0x2v"
+    classes: [car, bus, truck, van]
+  visdrone:
+    url: "https://github.com/VisDrone/VisDrone-Dataset"
+    classes: [car, bus, truck, pedestrian, van, motor]
+
+# =============================================================================
+# Augmentation
+# =============================================================================
+augmentation:
+  # Context-specific augmentations
+  weather_simulation:
+    rain_overlay: true              # Synthetic rain drops
+    fog_overlay: true               # Gaussian blur + brightness
+    night_darkening: true           # Reduce brightness by 60-80%
+  # Standard YOLO augmentations
+  mosaic: 0.5
+  mixup: 0.1
+  hsv_h: 0.015
+  hsv_s: 0.7
+  hsv_v: 0.4
+  flipud: 0.0                      # No vertical flip (cameras are fixed)
+  fliplr: 0.5
+
+# =============================================================================
+# MLflow Experiment Tracking
+# =============================================================================
+mlflow:
+  experiment_name: "sg-cati-training"
+  tracking_uri: "mlruns"
+  log_every_n_epochs: 5
+  log_model_artifacts: true
+
+# =============================================================================
+# Evaluation
+# =============================================================================
+evaluation:
+  metrics: [mAP50, mAP50-95, precision, recall]
+  # Condition-stratified evaluation
+  stratify_by:
+    - weather_condition
+    - resolution_bucket
+    - time_of_day
+  benchmarks:
+    - name: "YOLOv11s (COCO baseline)"
+      weights: "yolo11s.pt"
+    - name: "YOLOv11s (UA-DETRAC fine-tuned)"
+      weights: "models/yolo11s_traffic.pt"
+    - name: "CATI (ours)"
+      weights: "models/cati_latest.pt"
+
+# =============================================================================
+# Export
+# =============================================================================
+export:
+  formats: [onnx, torchscript]
+  opset: 17                         # ONNX opset version
+  simplify: true
+  quantize:
+    int8: true                      # TensorRT INT8 for edge deployment
+    calibration_images: 200
