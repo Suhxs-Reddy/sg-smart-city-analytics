@@ -362,6 +362,8 @@ class CATIPipeline:
         # Per-camera tracker instances (created on first frame for that camera)
         self._trackers: dict[str, object] = {}
 
+        # Public accessor for demo notebook
+        self.speed_estimator = self._speed_est
         logger.info("CATIPipeline ready")
 
     def _get_tracker(self, camera_id: str):
