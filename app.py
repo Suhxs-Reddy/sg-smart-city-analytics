@@ -472,6 +472,7 @@ with tab_detect:
             pm25 = st.slider("PM2.5 (µg/m³)", 0.0, 150.0, 15.0, 1.0)
             hour = float(time.strftime("%H")) + float(time.strftime("%M")) / 60.0
             st.metric("Hour (auto)", f"{hour:.1f}")
+            conf_thresh = st.slider("Confidence threshold", 0.05, 0.9, 0.10, 0.05)
 
         run_detect = st.button("▶  Run CATI Detection", use_container_width=True)
 
@@ -501,6 +502,7 @@ with tab_detect:
 
                         with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
                             preview.save(tmp.name)
+                            model.config.conf_threshold = conf_thresh
                             result = model.predict(
                                 image_path=tmp.name,
                                 camera_id=cam_id_int % 90,
@@ -514,8 +516,11 @@ with tab_detect:
                                 use_film=True,
                             )
 
+                        n = result["num_detections"]
                         annotated = draw_detections(preview, result["detections"])
-                        st.image(annotated, caption="CATI detections", use_container_width=True)
+                        st.image(annotated, caption=f"CATI detections — {n} object(s) found", use_container_width=True)
+                        if n == 0:
+                            st.info("No detections above threshold. Try lowering the confidence slider.")
 
                         # Analytics
                         counts = {}
