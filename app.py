@@ -148,6 +148,22 @@ def _run_inference_loop(state: dict):
         state["error"] = f"Model load failed: {err}"
         return
 
+    # On startup: pull existing dataset from HF Hub so we don't lose history
+    if not DATASET_PATH.exists():
+        try:
+            from huggingface_hub import hf_hub_download
+            hf_token = os.environ.get("HF_TOKEN")
+            existing = hf_hub_download(
+                repo_id="SuhxsReddy/cati-singapore-dataset",
+                filename="cati_detections.csv",
+                repo_type="dataset",
+                token=hf_token,
+            )
+            import shutil
+            shutil.copy(existing, DATASET_PATH)
+        except Exception:
+            pass  # no existing dataset yet, start fresh
+
     # Init dataset CSV
     write_header = not DATASET_PATH.exists()
     dataset_file = open(DATASET_PATH, "a", newline="")
@@ -236,6 +252,25 @@ def _run_inference_loop(state: dict):
 
         state["running"] = False
         state["last_sweep"] = time.time()
+
+        # Push dataset to HF Hub after every sweep so restarts don't lose data
+        try:
+            from huggingface_hub import HfApi
+            hf_token = os.environ.get("HF_TOKEN")
+            if hf_token and DATASET_PATH.exists():
+                api = HfApi()
+                api.create_repo("SuhxsReddy/cati-singapore-dataset", token=hf_token,
+                                repo_type="dataset", exist_ok=True, private=False)
+                api.upload_file(
+                    path_or_fileobj=str(DATASET_PATH),
+                    path_in_repo="cati_detections.csv",
+                    repo_id="SuhxsReddy/cati-singapore-dataset",
+                    repo_type="dataset",
+                    token=hf_token,
+                )
+        except Exception:
+            pass  # dataset push failing should never stop inference
+
         time.sleep(INFERENCE_INTERVAL)
 
 
