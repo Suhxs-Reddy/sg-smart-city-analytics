@@ -479,10 +479,14 @@ with tab_detect:
         with col_img:
             cam_img_url = selected_cam.get("image", "")
             preview = load_image(cam_img_url) if cam_img_url else None
+            img_slot = st.empty()  # single slot — preview or annotated renders here
+            caption_slot = st.empty()
+
             if preview:
-                st.image(preview, caption="Live feed (no detection)", use_container_width=True)
+                img_slot.image(preview, use_container_width=True)
+                caption_slot.caption("Live feed — press Run to detect")
             else:
-                st.warning("Could not load camera image.")
+                img_slot.warning("Could not load camera image.")
 
         if run_detect:
             model, err = load_cati_model()
@@ -518,7 +522,9 @@ with tab_detect:
 
                         n = result["num_detections"]
                         annotated = draw_detections(preview, result["detections"])
-                        st.image(annotated, caption=f"CATI detections — {n} object(s) found", use_container_width=True)
+                        # Replace preview in the same slot
+                        img_slot.image(annotated, use_container_width=True)
+                        caption_slot.caption(f"CATI detections — {n} object(s) found")
                         if n == 0:
                             st.info("No detections above threshold. Try lowering the confidence slider.")
 
