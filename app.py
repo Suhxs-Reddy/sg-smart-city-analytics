@@ -401,7 +401,7 @@ CLASS_COLORS = {
 HF_MODEL_REPO = "SuhxsReddy/cati-singapore"
 
 
-@st.cache_resource(show_spinner="Loading CATI model from HuggingFace…")
+@st.cache_resource(show_spinner=False)
 def load_cati_model():
     """Download CATI + YOLO Phase 2 weights from HF Hub and initialise CATIBackboneWrapper."""
     try:
@@ -474,35 +474,33 @@ with tab_detect:
             st.metric("Hour (auto)", f"{hour:.1f}")
             conf_thresh = st.slider("Confidence threshold", 0.05, 0.9, 0.10, 0.05)
 
+        # Load preview image before layout so columns render with content
+        cam_img_url = selected_cam.get("image", "")
+        preview = load_image(cam_img_url) if cam_img_url else None
+
         run_detect = st.button("▶  Run CATI Detection", use_container_width=True)
 
         with col_img:
-            cam_img_url = selected_cam.get("image", "")
-            preview = load_image(cam_img_url) if cam_img_url else None
-            img_slot = st.empty()  # single slot — preview or annotated renders here
-            caption_slot = st.empty()
-
             if preview:
-                img_slot.image(preview, use_container_width=True)
-                caption_slot.caption("Live feed — press Run to detect")
+                st.image(preview, caption="Live feed — press Run to detect", use_container_width=True)
             else:
-                img_slot.warning("Could not load camera image.")
+                st.warning("Could not load camera image.")
 
         if run_detect:
-            model, err = load_cati_model()
-            if err:
-                st.error(f"Model load failed: {err}")
-            elif preview is None:
+            if preview is None:
                 st.error("No image to run detection on.")
             else:
-                with st.spinner("Running CATI inference…"):
+                status = st.status("Running CATI inference…", expanded=False)
+                model, err = load_cati_model()
+                if err:
+                    status.update(label=f"Model load failed: {err}", state="error")
+                else:
                     try:
                         cam_id_int = int(selected_cam.get("camera_id", 0))
                         loc = selected_cam.get("location", {})
                         lat = loc.get("latitude")
                         lon = loc.get("longitude")
                         w, h = preview.size
-                        resolution = (w, h)
 
                         with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
                             preview.save(tmp.name)
@@ -514,37 +512,35 @@ with tab_detect:
                                 temperature=temperature,
                                 pm25=pm25,
                                 hour=hour,
-                                resolution=resolution,
+                                resolution=(w, h),
                                 camera_lat=lat,
                                 camera_lon=lon,
                                 use_film=True,
                             )
 
                         n = result["num_detections"]
+                        status.update(label=f"Done — {n} object(s) detected", state="complete")
                         annotated = draw_detections(preview, result["detections"])
-                        # Replace preview in the same slot
-                        img_slot.image(annotated, use_container_width=True)
-                        caption_slot.caption(f"CATI detections — {n} object(s) found")
+                        st.image(annotated, caption=f"CATI detections — {n} object(s)", use_container_width=True)
                         if n == 0:
                             st.info("No detections above threshold. Try lowering the confidence slider.")
+                        else:
+                            counts = {}
+                            for det in result["detections"]:
+                                cls = CATI_CLASSES[det["class_id"]] if det["class_id"] < len(CATI_CLASSES) else "unknown"
+                                counts[cls] = counts.get(cls, 0) + 1
 
-                        # Analytics
-                        counts = {}
-                        for det in result["detections"]:
-                            cls = CATI_CLASSES[det["class_id"]] if det["class_id"] < len(CATI_CLASSES) else "unknown"
-                            counts[cls] = counts.get(cls, 0) + 1
+                            st.markdown("**Detection results**")
+                            mc = st.columns(len(CATI_CLASSES))
+                            for i, cls in enumerate(CATI_CLASSES):
+                                mc[i].metric(cls.capitalize(), counts.get(cls, 0))
 
-                        st.markdown("**Detection results**")
-                        mc = st.columns(len(CATI_CLASSES))
-                        for i, cls in enumerate(CATI_CLASSES):
-                            mc[i].metric(cls.capitalize(), counts.get(cls, 0))
-
-                        ctx = result["context"]
-                        st.caption(
-                            f"Weather: {ctx['weather']} · Temp: {ctx['temperature']}°C · "
-                            f"PM2.5: {ctx['pm25']} · Hour: {ctx['hour']:.1f} · "
-                            f"Device: {result['inference_device']} · "
-                            f"CATI params: {result['cati_params']['total_cati_overhead']:,}"
-                        )
+                            ctx = result["context"]
+                            st.caption(
+                                f"Weather: {ctx['weather']} · Temp: {ctx['temperature']}°C · "
+                                f"PM2.5: {ctx['pm25']} · Hour: {ctx['hour']:.1f} · "
+                                f"Device: {result['inference_device']} · "
+                                f"CATI params: {result['cati_params']['total_cati_overhead']:,}"
+                            )
                     except Exception as e:
-                        st.error(f"Inference failed: {e}")
+                        status.update(label=f"Inference error: {e}", state="error")
