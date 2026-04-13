@@ -1,11 +1,14 @@
 """
 CATI Smart City Analytics — Singapore Expressway Live Feed
 Standalone Streamlit frontend. Fetches directly from LTA Traffic Images API.
-No backend or GPU required — deploys instantly on HuggingFace Spaces.
+CATI inference tab runs context-aware detection using trained weights from HF Hub.
 """
 
 from __future__ import annotations
 
+import os
+import sys
+import tempfile
 import time
 import urllib.request
 from io import BytesIO
@@ -13,9 +16,12 @@ from io import BytesIO
 import folium
 import requests
 import streamlit as st
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 from streamlit_autorefresh import st_autorefresh
 from streamlit_folium import st_folium
+
+# Make src/ importable (works both locally and in Docker /app)
+sys.path.insert(0, os.path.dirname(__file__))
 
 # ── Page config ────────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -258,7 +264,7 @@ k4.metric("Network", "Singapore Expressways")
 st.markdown("---")
 
 # ── Tabs ───────────────────────────────────────────────────────────────────────
-tab_map, tab_feeds = st.tabs(["🗺️  Map", "📷  Live Feeds"])
+tab_map, tab_feeds, tab_detect = st.tabs(["🗺️  Map", "📷  Live Feeds", "🤖  CATI Detection"])
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 1 — MAP
@@ -377,3 +383,157 @@ with tab_feeds:
                                 unsafe_allow_html=True,
                             )
                         st.caption(f"Cam {cam_id}")
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 3 — CATI DETECTION
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Class names (6-class Singapore traffic model)
+CATI_CLASSES = ["car", "motorcycle", "bus", "truck", "van", "lorry"]
+CLASS_COLORS = {
+    "car":        "#58a6ff",
+    "motorcycle": "#f78166",
+    "bus":        "#3fb950",
+    "truck":      "#d29922",
+    "van":        "#bc8cff",
+    "lorry":      "#ff7b72",
+}
+HF_MODEL_REPO = "SuhxsReddy/cati-singapore"
+
+
+@st.cache_resource(show_spinner="Loading CATI model from HuggingFace…")
+def load_cati_model():
+    """Download CATI + YOLO Phase 2 weights from HF Hub and initialise CATIBackboneWrapper."""
+    try:
+        from huggingface_hub import hf_hub_download
+        from src.models.cati_detector import CATIBackboneWrapper, CATIConfig
+
+        cati_path = hf_hub_download(repo_id=HF_MODEL_REPO, filename="cati_best.pt")
+        yolo_path = hf_hub_download(repo_id=HF_MODEL_REPO, filename="yolo_backbone.pt")
+
+        config = CATIConfig(use_context_augmentation=False)
+        wrapper = CATIBackboneWrapper(
+            yolo_model_path=yolo_path,
+            config=config,
+            cati_weights_path=cati_path,
+            device="cpu",
+        )
+        return wrapper, None
+    except Exception as e:
+        return None, str(e)
+
+
+def draw_detections(image: Image.Image, detections: list[dict]) -> Image.Image:
+    """Draw bounding boxes on a PIL image."""
+    img = image.convert("RGB")
+    draw = ImageDraw.Draw(img)
+    try:
+        font = ImageFont.load_default(size=14)
+    except Exception:
+        font = ImageFont.load_default()
+
+    for det in detections:
+        x1, y1, x2, y2 = det["bbox"]
+        cls_name = CATI_CLASSES[det["class_id"]] if det["class_id"] < len(CATI_CLASSES) else "unknown"
+        color = CLASS_COLORS.get(cls_name, "#ffffff")
+        conf = det["confidence"]
+
+        draw.rectangle([x1, y1, x2, y2], outline=color, width=2)
+        label = f"{cls_name} {conf:.2f}"
+        draw.rectangle([x1, y1 - 16, x1 + len(label) * 8, y1], fill=color)
+        draw.text((x1 + 2, y1 - 15), label, fill="#0d0f14", font=font)
+
+    return img
+
+
+with tab_detect:
+    st.markdown("### CATI Context-Aware Detection")
+    st.caption("Runs YOLOv11s + FiLM conditioning using real-time Singapore environmental metadata.")
+
+    if not cameras:
+        st.warning("No camera data available. Refresh the page.")
+    else:
+        cam_options = {f"Cam {c['camera_id']} ({_cam_road(c['camera_id'])})": c for c in cameras}
+        selected_label = st.selectbox("Select camera", list(cam_options.keys()))
+        selected_cam = cam_options[selected_label]
+
+        col_ctx, col_img = st.columns([1, 2])
+
+        with col_ctx:
+            st.markdown("**Environmental context**")
+            weather_choice = st.selectbox(
+                "Weather",
+                ["clear", "partly_cloudy", "cloudy", "overcast",
+                 "light_rain", "moderate_rain", "heavy_rain",
+                 "thunderstorm", "haze", "fog"],
+                index=0,
+            )
+            temperature = st.slider("Temperature (°C)", 22.0, 36.0, 28.0, 0.5)
+            pm25 = st.slider("PM2.5 (µg/m³)", 0.0, 150.0, 15.0, 1.0)
+            hour = float(time.strftime("%H")) + float(time.strftime("%M")) / 60.0
+            st.metric("Hour (auto)", f"{hour:.1f}")
+
+        run_detect = st.button("▶  Run CATI Detection", use_container_width=True)
+
+        with col_img:
+            cam_img_url = selected_cam.get("image", "")
+            preview = load_image(cam_img_url) if cam_img_url else None
+            if preview:
+                st.image(preview, caption="Live feed (no detection)", use_container_width=True)
+            else:
+                st.warning("Could not load camera image.")
+
+        if run_detect:
+            model, err = load_cati_model()
+            if err:
+                st.error(f"Model load failed: {err}")
+            elif preview is None:
+                st.error("No image to run detection on.")
+            else:
+                with st.spinner("Running CATI inference…"):
+                    try:
+                        cam_id_int = int(selected_cam.get("camera_id", 0))
+                        loc = selected_cam.get("location", {})
+                        lat = loc.get("latitude")
+                        lon = loc.get("longitude")
+                        w, h = preview.size
+                        resolution = (w, h)
+
+                        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
+                            preview.save(tmp.name)
+                            result = model.predict(
+                                image_path=tmp.name,
+                                camera_id=cam_id_int % 90,
+                                weather=weather_choice,
+                                temperature=temperature,
+                                pm25=pm25,
+                                hour=hour,
+                                resolution=resolution,
+                                camera_lat=lat,
+                                camera_lon=lon,
+                                use_film=True,
+                            )
+
+                        annotated = draw_detections(preview, result["detections"])
+                        st.image(annotated, caption="CATI detections", use_container_width=True)
+
+                        # Analytics
+                        counts = {}
+                        for det in result["detections"]:
+                            cls = CATI_CLASSES[det["class_id"]] if det["class_id"] < len(CATI_CLASSES) else "unknown"
+                            counts[cls] = counts.get(cls, 0) + 1
+
+                        st.markdown("**Detection results**")
+                        mc = st.columns(len(CATI_CLASSES))
+                        for i, cls in enumerate(CATI_CLASSES):
+                            mc[i].metric(cls.capitalize(), counts.get(cls, 0))
+
+                        ctx = result["context"]
+                        st.caption(
+                            f"Weather: {ctx['weather']} · Temp: {ctx['temperature']}°C · "
+                            f"PM2.5: {ctx['pm25']} · Hour: {ctx['hour']:.1f} · "
+                            f"Device: {result['inference_device']} · "
+                            f"CATI params: {result['cati_params']['total_cati_overhead']:,}"
+                        )
+                    except Exception as e:
+                        st.error(f"Inference failed: {e}")
