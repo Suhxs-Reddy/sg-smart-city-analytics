@@ -121,7 +121,11 @@ def get_model():
 
         cati_path = hf_hub_download(repo_id=HF_MODEL_REPO, filename="cati_best.pt")
         yolo_path = hf_hub_download(repo_id=HF_MODEL_REPO, filename="yolo_backbone.pt")
-        config = CATIConfig(use_context_augmentation=False, conf_threshold=0.15)
+        config = CATIConfig(
+            use_context_augmentation=False,
+            conf_threshold=0.15,
+            neck_channels=[128, 256, 512],  # Phase 2 trained with neck FiLM
+        )
         return CATIBackboneWrapper(yolo_model_path=yolo_path, config=config,
                                    cati_weights_path=cati_path, device="cpu"), None
     except Exception as e:
