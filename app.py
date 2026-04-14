@@ -169,11 +169,8 @@ def _draw_boxes(image: Image.Image, detections: list[dict]) -> Image.Image:
     return img
 
 
-def _run_inference_loop(state: dict):
-    model, err = get_model()
-    if err:
-        state["error"] = f"Model load failed: {err}"
-        return
+def _run_inference_loop(state: dict, model):
+    """Inference loop — model is passed in, already loaded in main thread."""
 
     is_first_sweep = True
     ANNOTATED_DIR.mkdir(exist_ok=True)
@@ -335,9 +332,13 @@ def _run_inference_loop(state: dict):
 def start_inference_thread():
     state = get_state()
     if not state["started"]:
-        state["started"] = True
-        t = threading.Thread(target=_run_inference_loop, args=(state,), daemon=True)
-        t.start()
+        model, err = get_model()  # load in main Streamlit thread
+        if err:
+            state["error"] = f"Model load failed: {err}"
+        else:
+            state["started"] = True
+            t = threading.Thread(target=_run_inference_loop, args=(state, model), daemon=True)
+            t.start()
     return True
 
 
