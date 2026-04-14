@@ -142,11 +142,41 @@ def get_state() -> dict:
     }
 
 
+ANNOTATED_DIR = Path("/tmp/annotated")
+CATI_CLASS_COLORS = {
+    "car": "#58a6ff", "motorcycle": "#f78166", "bus": "#3fb950",
+    "truck": "#d29922", "van": "#bc8cff", "lorry": "#ff7b72",
+}
+
+
+def _draw_boxes(image: Image.Image, detections: list[dict]) -> Image.Image:
+    from PIL import ImageDraw, ImageFont
+    img = image.convert("RGB")
+    draw = ImageDraw.Draw(img)
+    try:
+        font = ImageFont.load_default(size=14)
+    except Exception:
+        font = ImageFont.load_default()
+    for det in detections:
+        x1, y1, x2, y2 = det["bbox"]
+        cls = CATI_CLASSES[det["class_id"]] if det["class_id"] < len(CATI_CLASSES) else "unknown"
+        color = CATI_CLASS_COLORS.get(cls, "#ffffff")
+        conf = det["confidence"]
+        draw.rectangle([x1, y1, x2, y2], outline=color, width=2)
+        label = f"{cls} {conf:.2f}"
+        draw.rectangle([x1, y1 - 16, x1 + len(label) * 8, y1], fill=color)
+        draw.text((x1 + 2, y1 - 15), label, fill="#0d0f14", font=font)
+    return img
+
+
 def _run_inference_loop(state: dict):
     model, err = get_model()
     if err:
         state["error"] = f"Model load failed: {err}"
         return
+
+    is_first_sweep = True
+    ANNOTATED_DIR.mkdir(exist_ok=True)
 
     # On startup: pull existing dataset from HF Hub so we don't lose history
     if not DATASET_PATH.exists():
@@ -245,6 +275,14 @@ def _run_inference_loop(state: dict):
                                  result["num_detections"]] + [counts[c] for c in CATI_CLASSES])
                 dataset_file.flush()
 
+                # Save annotated image on first sweep only
+                if is_first_sweep and result["num_detections"] > 0:
+                    try:
+                        annotated = _draw_boxes(img, result["detections"])
+                        annotated.save(ANNOTATED_DIR / f"cam_{cam_id}_{road}.jpg")
+                    except Exception:
+                        pass
+
             except Exception:
                 pass
 
@@ -252,6 +290,25 @@ def _run_inference_loop(state: dict):
 
         state["running"] = False
         state["last_sweep"] = time.time()
+
+        # Push annotated images after first sweep
+        if is_first_sweep:
+            try:
+                from huggingface_hub import HfApi
+                hf_token = os.environ.get("HF_TOKEN")
+                if hf_token:
+                    api = HfApi()
+                    for img_path in ANNOTATED_DIR.glob("*.jpg"):
+                        api.upload_file(
+                            path_or_fileobj=str(img_path),
+                            path_in_repo=f"annotated/{img_path.name}",
+                            repo_id="SuhxsReddy/cati-singapore-dataset",
+                            repo_type="dataset",
+                            token=hf_token,
+                        )
+            except Exception:
+                pass
+            is_first_sweep = False
 
         # Push dataset to HF Hub after every sweep so restarts don't lose data
         try:
