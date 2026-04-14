@@ -21,7 +21,8 @@ RUN pip install --no-cache-dir \
     Pillow>=10.0.0 \
     ultralytics>=8.3.0 \
     huggingface_hub>=0.22.0 \
-    numpy>=1.24.0
+    numpy>=1.24.0 \
+    pandas>=2.1.0
 
 COPY src/ ./src/
 COPY app.py .

@@ -328,22 +328,25 @@ def _run_inference_loop(state: dict, model):
         time.sleep(INFERENCE_INTERVAL)
 
 
-@st.cache_resource(show_spinner=False)
-def start_inference_thread():
+_thread_lock = threading.Lock()
+
+
+def ensure_inference_running():
     state = get_state()
-    if not state["started"]:
-        model, err = get_model()  # load in main Streamlit thread
+    with _thread_lock:
+        if state["started"]:
+            return
+        model, err = get_model()  # runs in main Streamlit thread — cache_resource is safe here
         if err:
-            state["error"] = f"Model load failed: {err}"
-        else:
-            state["started"] = True
-            t = threading.Thread(target=_run_inference_loop, args=(state, model), daemon=True)
-            t.start()
-    return True
+            state["error"] = err
+            return
+        state["started"] = True
+        t = threading.Thread(target=_run_inference_loop, args=(state, model), daemon=True)
+        t.start()
 
 
-# ── Start background inference ─────────────────────────────────────────────────
-start_inference_thread()
+# ── Start background inference (called on every rerun, lock prevents double-start)
+ensure_inference_running()
 state = get_state()
 cameras = fetch_cameras()
 weather = fetch_weather()
@@ -367,7 +370,7 @@ with h1:
         ago = int(time.time() - state["last_sweep"])
         st.caption(f"Last sweep {ago}s ago · Next in ~{max(0, INFERENCE_INTERVAL - ago)}s")
     elif state["error"]:
-        st.caption(f"⚠ {state['error']}")
+        st.error(f"⚠ {state['error']}")
     else:
         st.caption("Starting inference engine…")
 
