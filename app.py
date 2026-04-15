@@ -274,7 +274,8 @@ def _run_inference_loop(state: dict, model):
         writer.writerow(["timestamp", "camera_id", "road", "lat", "lon",
                          "weather", "total_vehicles",
                          "dir_a", "dir_b",
-                         "car", "motorcycle", "bus", "truck", "van", "lorry"])
+                         "car", "motorcycle", "bus", "truck", "van", "lorry",
+                         "conf_threshold", "iou_threshold", "imgsz", "model_version"])
 
     while True:
         try:
@@ -375,7 +376,11 @@ def _run_inference_loop(state: dict, model):
 
                 writer.writerow([ts, cam_id, road, lat, lon, weather,
                                  result["num_detections"], dir_a, dir_b]
-                                + [counts[c] for c in CATI_CLASSES])
+                                + [counts[c] for c in CATI_CLASSES]
+                                + [model.config.conf_threshold,
+                                   model.config.iou_threshold,
+                                   model.config.img_size,
+                                   "cati-phase2-neck"])
                 dataset_file.flush()
 
                 # Save annotated image on first sweep only
