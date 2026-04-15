@@ -26,7 +26,7 @@ import numpy as np
 from PIL import Image
 
 NETWORK_PATH = Path("/tmp/camera_network.json")
-NETWORK_VERSION = "3"               # bump to force network rebuild
+NETWORK_VERSION = "4"               # bump to force network rebuild
 JUNCTION_THRESHOLD_KM = 0.5         # cross-road proximity for junction edges
 RAMP_THRESHOLD_KM = 0.15            # same-road proximity to flag ramp candidates
 
@@ -229,6 +229,13 @@ class CameraNetwork:
         # Junction edges across roads
         self._add_junction_edges()
 
+        # Visibility analysis — run after junction edges are built
+        from src.network.visibility import analyse_visibility
+        for cam_id in self.graph.nodes:
+            vis = analyse_visibility(self.graph, cam_id)
+            self.graph.nodes[cam_id]["visible_directions"] = vis
+            self.graph.nodes[cam_id]["is_junction_camera"] = len(vis) > 2
+
         s = self.stats()
         print(f"[CameraNetwork] {s['nodes']} nodes | "
               f"{s['road_edges']} road edges | {s['junction_edges']} junction edges | "
@@ -261,6 +268,12 @@ class CameraNetwork:
 
     def is_ramp(self, cam_id: str) -> bool:
         return self.graph.nodes.get(str(cam_id), {}).get("is_ramp", False)
+
+    def visible_directions(self, cam_id: str) -> list[dict]:
+        return self.graph.nodes.get(str(cam_id), {}).get("visible_directions", [])
+
+    def is_junction_camera(self, cam_id: str) -> bool:
+        return self.graph.nodes.get(str(cam_id), {}).get("is_junction_camera", False)
 
     def lanes(self, cam_id: str) -> list[dict]:
         return self.graph.nodes.get(str(cam_id), {}).get("lanes", [])

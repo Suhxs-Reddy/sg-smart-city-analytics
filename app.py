@@ -386,37 +386,36 @@ def _run_inference_loop(state: dict, model):
                 # Use lane positions for dir_a/dir_b if network is ready,
                 # otherwise fall back to 2-frame motion tracking
                 import json as _json
-                dir_a_label, dir_b_label = (camera_net.direction_labels(cam_id)
-                                             if camera_net else ("Direction A", "Direction B"))
                 lane_counts_list: list[dict] = []
 
                 if camera_net:
-                    from src.network.lane_detector import assign_lane
-                    lanes = camera_net.lanes(cam_id)
-                    if lanes:
-                        # Per-lane tallies
-                        per_lane: dict[int, int] = {l["lane_idx"]: 0 for l in lanes}
-                        for det in result["detections"]:
-                            li = assign_lane(det["bbox"], lanes, w)
-                            per_lane[li] = per_lane.get(li, 0) + 1
+                    from src.network.visibility import summarise_directions
+                    vis_dirs = camera_net.visible_directions(cam_id)
+                    lanes    = camera_net.lanes(cam_id)
 
-                        lane_counts_list = [
-                            {
-                                "lane": l["lane_idx"],
-                                "direction": l.get("direction", "unknown"),
-                                "count": per_lane.get(l["lane_idx"], 0),
-                            }
-                            for l in lanes
-                        ]
-                        # dir_a/dir_b totals from lane directions
-                        dir_a_count = sum(lc["count"] for lc in lane_counts_list
-                                          if lc["direction"] == dir_a_label)
-                        dir_b_count = sum(lc["count"] for lc in lane_counts_list
-                                          if lc["direction"] == dir_b_label)
+                    if vis_dirs:
+                        # Full N-direction summary (handles junctions)
+                        lane_counts_list = summarise_directions(
+                            result["detections"], w, h, lanes, vis_dirs
+                        )
                     else:
-                        dir_a_count, dir_b_count = _direction_from_frames(result["detections"], dets2)
+                        # Network built but no visibility yet — use frame tracking
+                        da, db = _direction_from_frames(result["detections"], dets2)
+                        vis_dirs = [{"label": "Direction A", "count": da},
+                                    {"label": "Direction B", "count": db}]
+                        lane_counts_list = vis_dirs
+
+                    dir_a_label, dir_b_label = camera_net.direction_labels(cam_id)
                 else:
-                    dir_a_count, dir_b_count = _direction_from_frames(result["detections"], dets2)
+                    da, db = _direction_from_frames(result["detections"], dets2)
+                    lane_counts_list = [{"label": "Direction A", "count": da},
+                                        {"label": "Direction B", "count": db}]
+                    dir_a_label, dir_b_label = "Direction A", "Direction B"
+
+                # dir_a / dir_b totals (mainline only, for backwards compatibility)
+                mainline = [d for d in lane_counts_list if d.get("type", "mainline") == "mainline"]
+                dir_a_count = mainline[0]["count"] if len(mainline) > 0 else 0
+                dir_b_count = mainline[1]["count"] if len(mainline) > 1 else 0
 
                 is_ramp = camera_net.is_ramp(cam_id) if camera_net else False
                 ts = time.strftime("%Y-%m-%d %H:%M:%S")
