@@ -24,7 +24,8 @@ RUN pip install --no-cache-dir \
     numpy>=1.24.0 \
     pandas>=2.1.0 \
     easyocr>=1.7.0 \
-    networkx>=3.0
+    networkx>=3.0 \
+    opencv-python-headless>=4.8.0
 
 COPY src/ ./src/
 COPY app.py .

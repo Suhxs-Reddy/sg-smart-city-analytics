@@ -26,7 +26,7 @@ import numpy as np
 from PIL import Image
 
 NETWORK_PATH = Path("/tmp/camera_network.json")
-NETWORK_VERSION = "2"               # bump to force network rebuild
+NETWORK_VERSION = "3"               # bump to force network rebuild
 JUNCTION_THRESHOLD_KM = 0.5         # cross-road proximity for junction edges
 RAMP_THRESHOLD_KM = 0.15            # same-road proximity to flag ramp candidates
 
@@ -199,6 +199,12 @@ class CameraNetwork:
                 dir_a, dir_b = (_ocr_direction(img, road) if img
                                 else FALLBACK_DIRECTIONS.get(road, ("Direction A", "Direction B")))
                 self._labels[cam["id"]] = (dir_a, dir_b)
+
+                # Lane detection
+                from src.network.lane_detector import detect_lanes, apply_road_directions
+                lanes = detect_lanes(img, road) if img else []
+                lanes = apply_road_directions(lanes, dir_a, dir_b)
+
                 self.graph.add_node(
                     cam["id"],
                     road=road,
@@ -207,6 +213,8 @@ class CameraNetwork:
                     dir_a=dir_a,
                     dir_b=dir_b,
                     is_ramp=cam["id"] in ramp_candidates,
+                    lanes=lanes,
+                    n_lanes=len(lanes),
                 )
 
             # Directed road edges
@@ -253,6 +261,12 @@ class CameraNetwork:
 
     def is_ramp(self, cam_id: str) -> bool:
         return self.graph.nodes.get(str(cam_id), {}).get("is_ramp", False)
+
+    def lanes(self, cam_id: str) -> list[dict]:
+        return self.graph.nodes.get(str(cam_id), {}).get("lanes", [])
+
+    def n_lanes(self, cam_id: str) -> int:
+        return self.graph.nodes.get(str(cam_id), {}).get("n_lanes", 0)
 
     def stats(self) -> dict:
         by_road: dict[str, int] = {}
