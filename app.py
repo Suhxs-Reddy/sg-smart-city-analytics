@@ -255,10 +255,29 @@ def _run_inference_loop(state: dict, model):
     is_first_sweep = True
     ANNOTATED_DIR.mkdir(exist_ok=True)
 
-    # Load or build camera network (OCR direction labels, road graph)
     from src.network.camera_network import CameraNetwork
     hf_token = os.environ.get("HF_TOKEN")
+
+    # Try loading existing network from HF Hub first
     camera_net = CameraNetwork.load_from_hub(hf_token)
+
+    # If no network yet, build immediately with fallback directions (no OCR, ~1s)
+    # This ensures direction labels are correct from the very first sweep
+    if camera_net is None:
+        try:
+            init_cameras = []
+            try:
+                r = requests.get(LTA_API, timeout=10)
+                init_cameras = r.json().get("items", [{}])[0].get("cameras", []) if r.ok else []
+            except Exception:
+                pass
+            if init_cameras:
+                camera_net = CameraNetwork()
+                camera_net.build(init_cameras, load_image_fn=lambda url: None)
+                state["network_ready"] = True
+        except Exception as e:
+            state["network_error"] = str(e)
+
     network_built = camera_net is not None
 
     CURRENT_SCHEMA = ["timestamp", "camera_id", "road", "lat", "lon",
@@ -461,24 +480,12 @@ def _run_inference_loop(state: dict, model):
         state["running"] = False
         state["last_sweep"] = time.time()
 
-        # Build camera network in a background thread — never blocks inference
-        if is_first_sweep and not network_built:
-            def _build_network():
-                try:
-                    net = CameraNetwork()
-                    # Skip OCR (slow/unreliable on CPU) — use known fallback directions
-                    # OCR can be run manually later once dataset is stable
-                    net.build(cameras, load_image_fn=lambda url: None)
-                    net.push_to_hub(hf_token)
-                    # Update the inference loop's reference
-                    _build_network.result = net
-                    state["network_ready"] = True
-                except Exception as e:
-                    state["network_error"] = str(e)
-            _build_network.result = None
-            _net_thread = threading.Thread(target=_build_network, daemon=True)
-            _net_thread.start()
-            network_built = True  # don't retry even if it fails
+        # Push network to HF Hub after first sweep so it persists across restarts
+        if is_first_sweep and camera_net:
+            try:
+                camera_net.push_to_hub(hf_token)
+            except Exception:
+                pass
 
         # Push annotated images after first sweep
         if is_first_sweep:
