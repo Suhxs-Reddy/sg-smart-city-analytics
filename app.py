@@ -263,7 +263,7 @@ def _run_inference_loop(state: dict, model):
 
     CURRENT_SCHEMA = ["timestamp", "camera_id", "road", "lat", "lon",
                       "weather", "total_vehicles", "dir_a", "dir_b",
-                      "dir_a_label", "dir_b_label", "is_ramp", "n_lanes", "lane_counts",
+                      "dir_a_label", "dir_b_label", "is_ramp",
                       "car", "motorcycle", "bus", "truck", "van", "lorry",
                       "conf_threshold", "iou_threshold", "imgsz", "model_version"]
 
@@ -382,25 +382,25 @@ def _run_inference_loop(state: dict, model):
                     if cls:
                         counts[cls] += 1
 
-                dir_a_count, dir_b_count = _direction_from_frames(result["detections"], dets2)
-
-                # Per-lane counts using lane ROIs from network
-                lane_counts: list[dict] = []
+                # Use lane positions for dir_a/dir_b if network is ready,
+                # otherwise fall back to 2-frame motion tracking
                 if camera_net:
                     from src.network.lane_detector import assign_lane
                     lanes = camera_net.lanes(cam_id)
                     if lanes:
-                        per_lane: dict[int, int] = {l["lane_idx"]: 0 for l in lanes}
+                        dir_a_count, dir_b_count = 0, 0
                         for det in result["detections"]:
                             li = assign_lane(det["bbox"], lanes, w)
-                            per_lane[li] = per_lane.get(li, 0) + 1
-                        lane_counts = [
-                            {"lane": l["lane_idx"], "direction": l.get("direction", "unknown"),
-                             "count": per_lane.get(l["lane_idx"], 0)}
-                            for l in lanes
-                        ]
+                            lane = next((l for l in lanes if l["lane_idx"] == li), None)
+                            if lane and lane.get("direction") == dir_a_label:
+                                dir_a_count += 1
+                            else:
+                                dir_b_count += 1
+                    else:
+                        dir_a_count, dir_b_count = _direction_from_frames(result["detections"], dets2)
                     dir_a_label, dir_b_label = camera_net.direction_labels(cam_id)
                 else:
+                    dir_a_count, dir_b_count = _direction_from_frames(result["detections"], dets2)
                     dir_a_label, dir_b_label = "Direction A", "Direction B"
 
                 is_ramp = camera_net.is_ramp(cam_id) if camera_net else False
@@ -413,19 +413,15 @@ def _run_inference_loop(state: dict, model):
                     "dir_a_label": dir_a_label,
                     "dir_b_label": dir_b_label,
                     "is_ramp": is_ramp,
-                    "lane_counts": lane_counts,
-                    "n_lanes": len(lane_counts),
                     "road": road,
                     "lat": lat,
                     "lon": lon,
                     "ts": ts,
                 }
 
-                import json as _json
                 writer.writerow([ts, cam_id, road, lat, lon, weather,
                                  result["num_detections"], dir_a_count, dir_b_count,
-                                 dir_a_label, dir_b_label, is_ramp,
-                                 len(lane_counts), _json.dumps(lane_counts)]
+                                 dir_a_label, dir_b_label, is_ramp]
                                 + [counts[c] for c in CATI_CLASSES]
                                 + [model.config.conf_threshold,
                                    model.config.iou_threshold,
