@@ -250,7 +250,12 @@ def _run_inference_loop(state: dict, model):
     is_first_sweep = True
     ANNOTATED_DIR.mkdir(exist_ok=True)
 
-    # On startup: pull existing dataset from HF Hub so we don't lose history
+    CURRENT_SCHEMA = ["timestamp", "camera_id", "road", "lat", "lon",
+                      "weather", "total_vehicles", "dir_a", "dir_b",
+                      "car", "motorcycle", "bus", "truck", "van", "lorry",
+                      "conf_threshold", "iou_threshold", "imgsz", "model_version"]
+
+    # On startup: pull existing dataset from HF Hub
     if not DATASET_PATH.exists():
         try:
             from huggingface_hub import hf_hub_download
@@ -264,18 +269,23 @@ def _run_inference_loop(state: dict, model):
             import shutil
             shutil.copy(existing, DATASET_PATH)
         except Exception:
-            pass  # no existing dataset yet, start fresh
+            pass
 
-    # Init dataset CSV
+    # Schema check — if pulled file has wrong columns, start fresh
+    if DATASET_PATH.exists():
+        try:
+            with open(DATASET_PATH) as f:
+                existing_header = f.readline().strip().split(",")
+            if existing_header != CURRENT_SCHEMA:
+                DATASET_PATH.unlink()  # delete stale schema, start fresh
+        except Exception:
+            DATASET_PATH.unlink()
+
     write_header = not DATASET_PATH.exists()
     dataset_file = open(DATASET_PATH, "a", newline="")
     writer = csv.writer(dataset_file)
     if write_header:
-        writer.writerow(["timestamp", "camera_id", "road", "lat", "lon",
-                         "weather", "total_vehicles",
-                         "dir_a", "dir_b",
-                         "car", "motorcycle", "bus", "truck", "van", "lorry",
-                         "conf_threshold", "iou_threshold", "imgsz", "model_version"])
+        writer.writerow(CURRENT_SCHEMA)
 
     while True:
         try:
