@@ -147,6 +147,76 @@ def get_state() -> dict:
 
 
 ANNOTATED_DIR = Path("/tmp/annotated")
+DIRECTION_FRAME_GAP = 2  # seconds between the two frames used for direction tracking
+
+
+def _iou(b1: list, b2: list) -> float:
+    """Compute IoU between two [x1,y1,x2,y2] boxes."""
+    ix1, iy1 = max(b1[0], b2[0]), max(b1[1], b2[1])
+    ix2, iy2 = min(b1[2], b2[2]), min(b1[3], b2[3])
+    inter = max(0, ix2 - ix1) * max(0, iy2 - iy1)
+    if inter == 0:
+        return 0.0
+    a1 = (b1[2] - b1[0]) * (b1[3] - b1[1])
+    a2 = (b2[2] - b2[0]) * (b2[3] - b2[1])
+    return inter / (a1 + a2 - inter)
+
+
+def _direction_from_frames(dets1: list[dict], dets2: list[dict]) -> tuple[int, int]:
+    """Match detections across 2 frames by IoU and split by dominant motion vector.
+
+    Returns (dir_a, dir_b) where dir_a = motion in negative dominant axis,
+    dir_b = motion in positive dominant axis.
+    """
+    if not dets1 or not dets2:
+        return len(dets1) or len(dets2), 0
+
+    # Match each det in frame1 to best det in frame2
+    movements = []
+    used = set()
+    for d1 in dets1:
+        best, best_idx = 0.0, -1
+        for i, d2 in enumerate(dets2):
+            if i in used:
+                continue
+            score = _iou(d1["bbox"], d2["bbox"])
+            if score > best and score > 0.25:
+                best, best_idx = score, i
+        if best_idx >= 0:
+            used.add(best_idx)
+            d2 = dets2[best_idx]
+            cx1 = (d1["bbox"][0] + d1["bbox"][2]) / 2
+            cy1 = (d1["bbox"][1] + d1["bbox"][3]) / 2
+            cx2 = (d2["bbox"][0] + d2["bbox"][2]) / 2
+            cy2 = (d2["bbox"][1] + d2["bbox"][3]) / 2
+            movements.append((cx2 - cx1, cy2 - cy1))
+
+    if not movements:
+        # No matched pairs — fall back to total count, no direction split
+        total = max(len(dets1), len(dets2))
+        return total // 2, total - total // 2
+
+    # Dominant axis: whichever has larger average absolute displacement
+    avg_dx = sum(abs(m[0]) for m in movements) / len(movements)
+    avg_dy = sum(abs(m[1]) for m in movements) / len(movements)
+    axis = 0 if avg_dx >= avg_dy else 1  # 0=x, 1=y
+
+    dir_a, dir_b = 0, 0
+    for dx, dy in movements:
+        delta = dx if axis == 0 else dy
+        if delta < 0:
+            dir_a += 1
+        else:
+            dir_b += 1
+
+    # Unmatched dets from frame2 (new arrivals) split proportionally
+    unmatched = len(dets2) - len(used)
+    if unmatched > 0 and (dir_a + dir_b) > 0:
+        ratio = dir_a / (dir_a + dir_b)
+        dir_a += round(unmatched * ratio)
+        dir_b += unmatched - round(unmatched * ratio)
+
+    return dir_a, dir_b
 CATI_CLASS_COLORS = {
     "car": "#58a6ff", "motorcycle": "#f78166", "bus": "#3fb950",
     "truck": "#d29922", "van": "#bc8cff", "lorry": "#ff7b72",
@@ -201,8 +271,9 @@ def _run_inference_loop(state: dict, model):
     writer = csv.writer(dataset_file)
     if write_header:
         writer.writerow(["timestamp", "camera_id", "road", "lat", "lon",
-                         "weather", "total_vehicles", "car", "motorcycle",
-                         "bus", "truck", "van", "lorry"])
+                         "weather", "total_vehicles",
+                         "dir_a", "dir_b",
+                         "car", "motorcycle", "bus", "truck", "van", "lorry"])
 
     while True:
         try:
@@ -242,6 +313,8 @@ def _run_inference_loop(state: dict, model):
                 w, h = img.size
                 with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
                     img.save(tmp.name)
+                    model.config.conf_threshold = 0.08
+                    model.config.iou_threshold = 0.25  # lower → separate side-by-side vehicles
                     result = model.predict(
                         image_path=tmp.name,
                         camera_id=int(cam_id) % 90,
@@ -256,16 +329,43 @@ def _run_inference_loop(state: dict, model):
                     )
                     os.unlink(tmp.name)
 
+                # Second frame for directional tracking
+                time.sleep(DIRECTION_FRAME_GAP)
+                img2 = load_image(img_url)
+                dets2 = []
+                if img2 is not None:
+                    w2, h2 = img2.size
+                    with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp2:
+                        img2.save(tmp2.name)
+                        result2 = model.predict(
+                            image_path=tmp2.name,
+                            camera_id=int(cam_id) % 90,
+                            weather=weather,
+                            temperature=28.0,
+                            pm25=15.0,
+                            hour=hour,
+                            resolution=(w2, h2),
+                            camera_lat=lat,
+                            camera_lon=lon,
+                            use_film=True,
+                        )
+                        os.unlink(tmp2.name)
+                    dets2 = result2["detections"]
+
                 counts = {c: 0 for c in CATI_CLASSES}
                 for det in result["detections"]:
                     cls = CATI_CLASSES[det["class_id"]] if det["class_id"] < len(CATI_CLASSES) else None
                     if cls:
                         counts[cls] += 1
 
+                dir_a, dir_b = _direction_from_frames(result["detections"], dets2)
+
                 ts = time.strftime("%Y-%m-%d %H:%M:%S")
                 state["results"][cam_id] = {
                     "count": result["num_detections"],
                     "by_class": counts,
+                    "dir_a": dir_a,
+                    "dir_b": dir_b,
                     "road": road,
                     "lat": lat,
                     "lon": lon,
@@ -273,7 +373,8 @@ def _run_inference_loop(state: dict, model):
                 }
 
                 writer.writerow([ts, cam_id, road, lat, lon, weather,
-                                 result["num_detections"]] + [counts[c] for c in CATI_CLASSES])
+                                 result["num_detections"], dir_a, dir_b]
+                                + [counts[c] for c in CATI_CLASSES])
                 dataset_file.flush()
 
                 # Save annotated image on first sweep only
@@ -461,8 +562,11 @@ with tab_roads:
         for cam_id, res in results.items():
             road = res["road"]
             if road not in road_data:
-                road_data[road] = {"total": 0, "cameras": 0, "by_class": {c: 0 for c in CATI_CLASSES}}
+                road_data[road] = {"total": 0, "dir_a": 0, "dir_b": 0,
+                                   "cameras": 0, "by_class": {c: 0 for c in CATI_CLASSES}}
             road_data[road]["total"] += res["count"]
+            road_data[road]["dir_a"] += res.get("dir_a", 0)
+            road_data[road]["dir_b"] += res.get("dir_b", 0)
             road_data[road]["cameras"] += 1
             for cls in CATI_CLASSES:
                 road_data[road]["by_class"][cls] += res["by_class"].get(cls, 0)
@@ -484,15 +588,23 @@ with tab_roads:
 
         st.markdown("---")
 
-        # Per-road breakdown
+        # Per-road breakdown with directional split
         for road in present:
             d = road_data[road]
             color = ROAD_COLOR.get(road, "#546e7a")
             st.markdown(f'<div class="road-header" style="color:{color}">{road} · {d["total"]} vehicles across {d["cameras"]} cameras</div>', unsafe_allow_html=True)
 
-            cls_cols = st.columns(len(CATI_CLASSES))
-            for col, cls in zip(cls_cols, CATI_CLASSES):
-                col.metric(cls.capitalize(), d["by_class"].get(cls, 0))
+            dir_col, cls_col = st.columns([1, 2])
+            with dir_col:
+                st.markdown("**Direction**")
+                da, db = st.columns(2)
+                da.metric("Dir A →", d["dir_a"])
+                db.metric("← Dir B", d["dir_b"])
+            with cls_col:
+                st.markdown("**By class**")
+                cls_cols = st.columns(len(CATI_CLASSES))
+                for col, cls in zip(cls_cols, CATI_CLASSES):
+                    col.metric(cls.capitalize(), d["by_class"].get(cls, 0))
 
         # Most congested cameras
         st.markdown("---")
@@ -501,12 +613,15 @@ with tab_roads:
         for cam_id, res in sorted_cams:
             bar_width = min(100, res["count"] * 8)
             color = ROAD_COLOR.get(res["road"], "#546e7a")
+            da = res.get("dir_a", 0)
+            db = res.get("dir_b", 0)
             st.markdown(
                 f'<div style="display:flex;align-items:center;gap:10px;margin:4px 0">'
                 f'<span style="width:80px;font-size:0.75rem;color:#8b949e">Cam {cam_id}</span>'
                 f'<span style="width:40px;font-size:0.75rem;color:{color}">{res["road"]}</span>'
                 f'<div style="background:{color};height:12px;width:{bar_width}px;border-radius:3px"></div>'
-                f'<span style="font-size:0.75rem">{res["count"]}</span>'
+                f'<span style="font-size:0.75rem">{res["count"]} &nbsp;'
+                f'<span style="color:#8b949e;font-size:0.65rem">({da}↑ {db}↓)</span></span>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
