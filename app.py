@@ -63,17 +63,22 @@ ROAD_COLOR = {
 }
 CATI_CLASSES = ["car", "motorcycle", "bus", "truck", "van", "lorry"]
 
-_PREFIX_ROAD = {"1": "CTE", "2": "CTE", "3": "ECP", "4": "PIE",
-                "5": "AYE", "6": "ECP", "7": "TPE", "8": "KJE", "9": "BKE"}
-_MCE_IDS = {"6702", "6703", "6704", "6705"}
-
 HF_MODEL_REPO = "SuhxsReddy/cati-singapore"
 
-
-def _cam_road(cam_id: str) -> str:
-    if cam_id in _MCE_IDS:
-        return "MCE"
-    return _PREFIX_ROAD.get(cam_id[0], "—")
+# Import authoritative road mapping (includes SLE heuristic)
+try:
+    from src.network.camera_network import cam_road as _cam_road_fn
+    def _cam_road(cam_id: str, lat: float = 0.0, lon: float = 0.0) -> str:
+        return _cam_road_fn(cam_id, lat, lon)
+except Exception:
+    # Fallback if src not available (local dev without Docker)
+    _MCE_IDS = {"6702", "6703", "6704", "6705"}
+    _PREFIX_ROAD = {"1": "CTE", "2": "CTE", "3": "ECP", "4": "PIE",
+                    "5": "AYE", "6": "ECP", "7": "TPE", "8": "KJE", "9": "BKE"}
+    def _cam_road(cam_id: str, lat: float = 0.0, lon: float = 0.0) -> str:
+        if cam_id in _MCE_IDS:
+            return "MCE"
+        return _PREFIX_ROAD.get(cam_id[0] if cam_id else "", "—")
 
 
 # ── API helpers ────────────────────────────────────────────────────────────────
@@ -258,7 +263,7 @@ def _run_inference_loop(state: dict, model):
 
     CURRENT_SCHEMA = ["timestamp", "camera_id", "road", "lat", "lon",
                       "weather", "total_vehicles", "dir_a", "dir_b",
-                      "dir_a_label", "dir_b_label",
+                      "dir_a_label", "dir_b_label", "is_ramp",
                       "car", "motorcycle", "bus", "truck", "van", "lorry",
                       "conf_threshold", "iou_threshold", "imgsz", "model_version"]
 
@@ -321,7 +326,7 @@ def _run_inference_loop(state: dict, model):
             loc = cam.get("location", {})
             lat = loc.get("latitude", 0)
             lon = loc.get("longitude", 0)
-            road = _cam_road(cam_id)
+            road = _cam_road(cam_id, lat, lon)
 
             img = load_image(img_url)
             if img is None:
@@ -385,6 +390,7 @@ def _run_inference_loop(state: dict, model):
                 else:
                     dir_a_label, dir_b_label = "Direction A", "Direction B"
 
+                is_ramp = camera_net.is_ramp(cam_id) if camera_net else False
                 ts = time.strftime("%Y-%m-%d %H:%M:%S")
                 state["results"][cam_id] = {
                     "count": result["num_detections"],
@@ -393,6 +399,7 @@ def _run_inference_loop(state: dict, model):
                     "dir_b": dir_b_count,
                     "dir_a_label": dir_a_label,
                     "dir_b_label": dir_b_label,
+                    "is_ramp": is_ramp,
                     "road": road,
                     "lat": lat,
                     "lon": lon,
@@ -401,7 +408,7 @@ def _run_inference_loop(state: dict, model):
 
                 writer.writerow([ts, cam_id, road, lat, lon, weather,
                                  result["num_detections"], dir_a_count, dir_b_count,
-                                 dir_a_label, dir_b_label]
+                                 dir_a_label, dir_b_label, is_ramp]
                                 + [counts[c] for c in CATI_CLASSES]
                                 + [model.config.conf_threshold,
                                    model.config.iou_threshold,
@@ -561,7 +568,7 @@ with tab_map:
         loc = cam.get("location", {})
         lat = loc.get("latitude", 0)
         lon = loc.get("longitude", 0)
-        road = _cam_road(cam_id)
+        road = _cam_road(cam_id, lat, lon)
         color = ROAD_COLOR.get(road, "#546e7a")
         res = results.get(cam_id)
 

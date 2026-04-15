@@ -29,6 +29,9 @@ RUN pip install --no-cache-dir \
 COPY src/ ./src/
 COPY app.py .
 
+# Pre-download EasyOCR English models so first sweep doesn't need internet
+RUN python3 -c "import easyocr; easyocr.Reader(['en'], gpu=False, verbose=False, model_storage_directory='/tmp/easyocr_models')" || true
+
 RUN useradd -m -u 1000 hfuser
 USER 1000
 
