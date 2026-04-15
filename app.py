@@ -264,6 +264,7 @@ def _run_inference_loop(state: dict, model):
     CURRENT_SCHEMA = ["timestamp", "camera_id", "road", "lat", "lon",
                       "weather", "total_vehicles", "dir_a", "dir_b",
                       "dir_a_label", "dir_b_label", "is_ramp",
+                      "lane_counts",
                       "car", "motorcycle", "bus", "truck", "van", "lorry",
                       "conf_threshold", "iou_threshold", "imgsz", "model_version"]
 
@@ -384,24 +385,38 @@ def _run_inference_loop(state: dict, model):
 
                 # Use lane positions for dir_a/dir_b if network is ready,
                 # otherwise fall back to 2-frame motion tracking
+                import json as _json
+                dir_a_label, dir_b_label = (camera_net.direction_labels(cam_id)
+                                             if camera_net else ("Direction A", "Direction B"))
+                lane_counts_list: list[dict] = []
+
                 if camera_net:
                     from src.network.lane_detector import assign_lane
                     lanes = camera_net.lanes(cam_id)
                     if lanes:
-                        dir_a_count, dir_b_count = 0, 0
+                        # Per-lane tallies
+                        per_lane: dict[int, int] = {l["lane_idx"]: 0 for l in lanes}
                         for det in result["detections"]:
                             li = assign_lane(det["bbox"], lanes, w)
-                            lane = next((l for l in lanes if l["lane_idx"] == li), None)
-                            if lane and lane.get("direction") == dir_a_label:
-                                dir_a_count += 1
-                            else:
-                                dir_b_count += 1
+                            per_lane[li] = per_lane.get(li, 0) + 1
+
+                        lane_counts_list = [
+                            {
+                                "lane": l["lane_idx"],
+                                "direction": l.get("direction", "unknown"),
+                                "count": per_lane.get(l["lane_idx"], 0),
+                            }
+                            for l in lanes
+                        ]
+                        # dir_a/dir_b totals from lane directions
+                        dir_a_count = sum(lc["count"] for lc in lane_counts_list
+                                          if lc["direction"] == dir_a_label)
+                        dir_b_count = sum(lc["count"] for lc in lane_counts_list
+                                          if lc["direction"] == dir_b_label)
                     else:
                         dir_a_count, dir_b_count = _direction_from_frames(result["detections"], dets2)
-                    dir_a_label, dir_b_label = camera_net.direction_labels(cam_id)
                 else:
                     dir_a_count, dir_b_count = _direction_from_frames(result["detections"], dets2)
-                    dir_a_label, dir_b_label = "Direction A", "Direction B"
 
                 is_ramp = camera_net.is_ramp(cam_id) if camera_net else False
                 ts = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -413,6 +428,7 @@ def _run_inference_loop(state: dict, model):
                     "dir_a_label": dir_a_label,
                     "dir_b_label": dir_b_label,
                     "is_ramp": is_ramp,
+                    "lane_counts": lane_counts_list,
                     "road": road,
                     "lat": lat,
                     "lon": lon,
@@ -421,7 +437,8 @@ def _run_inference_loop(state: dict, model):
 
                 writer.writerow([ts, cam_id, road, lat, lon, weather,
                                  result["num_detections"], dir_a_count, dir_b_count,
-                                 dir_a_label, dir_b_label, is_ramp]
+                                 dir_a_label, dir_b_label, is_ramp,
+                                 _json.dumps(lane_counts_list)]
                                 + [counts[c] for c in CATI_CLASSES]
                                 + [model.config.conf_threshold,
                                    model.config.iou_threshold,
