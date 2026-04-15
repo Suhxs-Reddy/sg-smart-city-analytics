@@ -319,15 +319,18 @@ def _run_inference_loop(state: dict, model):
                 api = HfApi()
                 api.create_repo("SuhxsReddy/cati-singapore-dataset", token=hf_token,
                                 repo_type="dataset", exist_ok=True, private=False)
-                api.upload_file(
-                    path_or_fileobj=str(DATASET_PATH),
-                    path_in_repo="cati_detections.csv",
-                    repo_id="SuhxsReddy/cati-singapore-dataset",
-                    repo_type="dataset",
-                    token=hf_token,
-                )
-        except Exception:
-            pass  # dataset push failing should never stop inference
+                with open(DATASET_PATH, "rb") as f:
+                    api.upload_file(
+                        path_or_fileobj=f,
+                        path_in_repo="cati_detections.csv",
+                        repo_id="SuhxsReddy/cati-singapore-dataset",
+                        repo_type="dataset",
+                        token=hf_token,
+                    )
+                state["last_push"] = time.strftime("%H:%M:%S")
+                state["push_error"] = None
+        except Exception as e:
+            state["push_error"] = str(e)  # visible in header, never stops inference
 
         time.sleep(INFERENCE_INTERVAL)
 
@@ -372,7 +375,10 @@ with h1:
         st.caption(f"Inference running — {done}/{total} cameras processed")
     elif state["last_sweep"]:
         ago = int(time.time() - state["last_sweep"])
-        st.caption(f"Last sweep {ago}s ago · Next in ~{max(0, INFERENCE_INTERVAL - ago)}s")
+        push_info = f" · Last push: {state.get('last_push', 'never')}"
+        if state.get("push_error"):
+            push_info = f" · Push error: {state['push_error']}"
+        st.caption(f"Last sweep {ago}s ago · Next in ~{max(0, INFERENCE_INTERVAL - ago)}s{push_info}")
     elif state["error"]:
         st.error(f"⚠ {state['error']}")
     else:
