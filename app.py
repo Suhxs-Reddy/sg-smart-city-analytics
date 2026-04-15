@@ -250,8 +250,15 @@ def _run_inference_loop(state: dict, model):
     is_first_sweep = True
     ANNOTATED_DIR.mkdir(exist_ok=True)
 
+    # Load or build camera network (OCR direction labels, road graph)
+    from src.network.camera_network import CameraNetwork
+    hf_token = os.environ.get("HF_TOKEN")
+    camera_net = CameraNetwork.load_from_hub(hf_token)
+    network_built = camera_net is not None
+
     CURRENT_SCHEMA = ["timestamp", "camera_id", "road", "lat", "lon",
                       "weather", "total_vehicles", "dir_a", "dir_b",
+                      "dir_a_label", "dir_b_label",
                       "car", "motorcycle", "bus", "truck", "van", "lorry",
                       "conf_threshold", "iou_threshold", "imgsz", "model_version"]
 
@@ -370,14 +377,22 @@ def _run_inference_loop(state: dict, model):
                     if cls:
                         counts[cls] += 1
 
-                dir_a, dir_b = _direction_from_frames(result["detections"], dets2)
+                dir_a_count, dir_b_count = _direction_from_frames(result["detections"], dets2)
+
+                # Get real direction labels from network (fallback to generic)
+                if camera_net:
+                    dir_a_label, dir_b_label = camera_net.direction_labels(cam_id)
+                else:
+                    dir_a_label, dir_b_label = "Direction A", "Direction B"
 
                 ts = time.strftime("%Y-%m-%d %H:%M:%S")
                 state["results"][cam_id] = {
                     "count": result["num_detections"],
                     "by_class": counts,
-                    "dir_a": dir_a,
-                    "dir_b": dir_b,
+                    "dir_a": dir_a_count,
+                    "dir_b": dir_b_count,
+                    "dir_a_label": dir_a_label,
+                    "dir_b_label": dir_b_label,
                     "road": road,
                     "lat": lat,
                     "lon": lon,
@@ -385,7 +400,8 @@ def _run_inference_loop(state: dict, model):
                 }
 
                 writer.writerow([ts, cam_id, road, lat, lon, weather,
-                                 result["num_detections"], dir_a, dir_b]
+                                 result["num_detections"], dir_a_count, dir_b_count,
+                                 dir_a_label, dir_b_label]
                                 + [counts[c] for c in CATI_CLASSES]
                                 + [model.config.conf_threshold,
                                    model.config.iou_threshold,
@@ -408,6 +424,17 @@ def _run_inference_loop(state: dict, model):
 
         state["running"] = False
         state["last_sweep"] = time.time()
+
+        # Build camera network after first sweep (OCR all cameras once)
+        if is_first_sweep and not network_built:
+            try:
+                camera_net = CameraNetwork()
+                camera_net.build(cameras, load_image)
+                camera_net.push_to_hub(hf_token)
+                network_built = True
+                state["network_ready"] = True
+            except Exception as e:
+                state["network_error"] = str(e)
 
         # Push annotated images after first sweep
         if is_first_sweep:
@@ -579,6 +606,8 @@ with tab_roads:
             road = res["road"]
             if road not in road_data:
                 road_data[road] = {"total": 0, "dir_a": 0, "dir_b": 0,
+                                   "dir_a_label": res.get("dir_a_label", "Dir A"),
+                                   "dir_b_label": res.get("dir_b_label", "Dir B"),
                                    "cameras": 0, "by_class": {c: 0 for c in CATI_CLASSES}}
             road_data[road]["total"] += res["count"]
             road_data[road]["dir_a"] += res.get("dir_a", 0)
@@ -614,8 +643,8 @@ with tab_roads:
             with dir_col:
                 st.markdown("**Direction**")
                 da, db = st.columns(2)
-                da.metric("Dir A →", d["dir_a"])
-                db.metric("← Dir B", d["dir_b"])
+                da.metric(d.get("dir_a_label", "Dir A"), d["dir_a"])
+                db.metric(d.get("dir_b_label", "Dir B"), d["dir_b"])
             with cls_col:
                 st.markdown("**By class**")
                 cls_cols = st.columns(len(CATI_CLASSES))

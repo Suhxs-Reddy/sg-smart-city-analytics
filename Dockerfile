@@ -22,7 +22,9 @@ RUN pip install --no-cache-dir \
     ultralytics>=8.3.0 \
     huggingface_hub>=0.22.0 \
     numpy>=1.24.0 \
-    pandas>=2.1.0
+    pandas>=2.1.0 \
+    easyocr>=1.7.0 \
+    networkx>=3.0
 
 COPY src/ ./src/
 COPY app.py .
