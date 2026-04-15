@@ -461,16 +461,24 @@ def _run_inference_loop(state: dict, model):
         state["running"] = False
         state["last_sweep"] = time.time()
 
-        # Build camera network after first sweep (OCR all cameras once)
+        # Build camera network in a background thread — never blocks inference
         if is_first_sweep and not network_built:
-            try:
-                camera_net = CameraNetwork()
-                camera_net.build(cameras, load_image)
-                camera_net.push_to_hub(hf_token)
-                network_built = True
-                state["network_ready"] = True
-            except Exception as e:
-                state["network_error"] = str(e)
+            def _build_network():
+                try:
+                    net = CameraNetwork()
+                    # Skip OCR (slow/unreliable on CPU) — use known fallback directions
+                    # OCR can be run manually later once dataset is stable
+                    net.build(cameras, load_image_fn=lambda url: None)
+                    net.push_to_hub(hf_token)
+                    # Update the inference loop's reference
+                    _build_network.result = net
+                    state["network_ready"] = True
+                except Exception as e:
+                    state["network_error"] = str(e)
+            _build_network.result = None
+            _net_thread = threading.Thread(target=_build_network, daemon=True)
+            _net_thread.start()
+            network_built = True  # don't retry even if it fails
 
         # Push annotated images after first sweep
         if is_first_sweep:

@@ -23,15 +23,12 @@ RUN pip install --no-cache-dir \
     huggingface_hub>=0.22.0 \
     numpy>=1.24.0 \
     pandas>=2.1.0 \
-    easyocr>=1.7.0 \
     networkx>=3.0 \
     opencv-python-headless>=4.8.0
 
 COPY src/ ./src/
 COPY app.py .
 
-# Pre-download EasyOCR English models so first sweep doesn't need internet
-RUN python3 -c "import easyocr; easyocr.Reader(['en'], gpu=False, verbose=False, model_storage_directory='/tmp/easyocr_models')" || true
 
 RUN useradd -m -u 1000 hfuser
 USER 1000

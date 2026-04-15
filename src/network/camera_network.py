@@ -195,7 +195,9 @@ class CameraNetwork:
                         ramp_candidates.add(a["id"])
 
             for cam in ordered:
-                img = load_image_fn(cam["img_url"])
+                img = load_image_fn(cam["img_url"]) if cam["img_url"] else None
+                # Only attempt OCR if image loaded — otherwise use known fallbacks
+                # (fallbacks are accurate for Singapore expressways)
                 dir_a, dir_b = (_ocr_direction(img, road) if img
                                 else FALLBACK_DIRECTIONS.get(road, ("Direction A", "Direction B")))
                 self._labels[cam["id"]] = (dir_a, dir_b)
