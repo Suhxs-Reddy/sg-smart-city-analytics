@@ -125,6 +125,7 @@ def get_model():
             use_context_augmentation=False,
             conf_threshold=0.15,
             neck_channels=[128, 256, 512],  # Phase 2 trained with neck FiLM
+            img_size=1280,  # 2x resolution catches distant/small vehicles
         )
         return CATIBackboneWrapper(yolo_model_path=yolo_path, config=config,
                                    cati_weights_path=cati_path, device="cpu"), None
