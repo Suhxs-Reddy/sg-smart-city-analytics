@@ -53,7 +53,8 @@ header[data-testid="stHeader"] { background: #161b22; border-bottom: 1px solid #
 LTA_API = "https://api.data.gov.sg/v1/transport/traffic-images"
 NEA_API = "https://api.data.gov.sg/v1/environment/24-hour-weather-forecast"
 SG_CENTER = [1.3521, 103.8198]
-DATASET_PATH = Path("/tmp/cati_dataset.csv")
+DATASET_PATH = Path("/tmp/cati_dataset_v2.csv")
+DATASET_HUB_FILENAME = "cati_detections_v2.csv"  # v2: ground-truth anchors, N-direction visibility
 INFERENCE_INTERVAL = 90  # seconds between full sweeps
 
 ROAD_COLOR = {
@@ -283,18 +284,19 @@ def _run_inference_loop(state: dict, model):
     CURRENT_SCHEMA = ["timestamp", "camera_id", "road", "lat", "lon",
                       "weather", "total_vehicles", "dir_a", "dir_b",
                       "dir_a_label", "dir_b_label", "is_ramp",
+                      "is_junction_camera", "n_visible_directions",
                       "lane_counts",
                       "car", "motorcycle", "bus", "truck", "van", "lorry",
                       "conf_threshold", "iou_threshold", "imgsz", "model_version"]
 
-    # On startup: pull existing dataset from HF Hub
+    # On startup: pull existing v2 dataset from HF Hub (old cati_detections.csv preserved separately)
     if not DATASET_PATH.exists():
         try:
             from huggingface_hub import hf_hub_download
             hf_token = os.environ.get("HF_TOKEN")
             existing = hf_hub_download(
                 repo_id="SuhxsReddy/cati-singapore-dataset",
-                filename="cati_detections.csv",
+                filename=DATASET_HUB_FILENAME,
                 repo_type="dataset",
                 token=hf_token,
             )
@@ -437,6 +439,8 @@ def _run_inference_loop(state: dict, model):
                 dir_b_count = mainline[1]["count"] if len(mainline) > 1 else 0
 
                 is_ramp = camera_net.is_ramp(cam_id) if camera_net else False
+                is_junction_camera = camera_net.is_junction_camera(cam_id) if camera_net else False
+                n_visible_directions = len(lane_counts_list)
                 ts = time.strftime("%Y-%m-%d %H:%M:%S")
                 state["results"][cam_id] = {
                     "count": result["num_detections"],
@@ -456,6 +460,7 @@ def _run_inference_loop(state: dict, model):
                 writer.writerow([ts, cam_id, road, lat, lon, weather,
                                  result["num_detections"], dir_a_count, dir_b_count,
                                  dir_a_label, dir_b_label, is_ramp,
+                                 is_junction_camera, n_visible_directions,
                                  _json.dumps(lane_counts_list)]
                                 + [counts[c] for c in CATI_CLASSES]
                                 + [model.config.conf_threshold,
@@ -517,7 +522,7 @@ def _run_inference_loop(state: dict, model):
                 with open(DATASET_PATH, "rb") as f:
                     api.upload_file(
                         path_or_fileobj=f,
-                        path_in_repo="cati_detections.csv",
+                        path_in_repo=DATASET_HUB_FILENAME,
                         repo_id="SuhxsReddy/cati-singapore-dataset",
                         repo_type="dataset",
                         token=hf_token,
