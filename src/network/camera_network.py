@@ -2,12 +2,11 @@
 Singapore LTA Camera Road Network
 ==================================
 Directed graph of all 90 LTA cameras with:
+  - Ground-truth direction labels from camera_config.json (read from actual LTA images)
   - PCA-based road axis sorting (correct for E-W roads like PIE/AYE)
   - Directed road edges: A→B (dir_a flow) and B→A (dir_b flow)
   - Junction edges: cross-road cameras within JUNCTION_THRESHOLD_KM
-  - SLE detection via lat/lon heuristic
   - Ramp camera flagging via proximity to same-road neighbours
-  - OCR direction labels from LTA image text overlays
   - Version field to detect stale cached JSON
 
 NETWORK_VERSION must be bumped whenever build logic changes.
@@ -17,7 +16,6 @@ from __future__ import annotations
 
 import json
 import math
-import re
 from pathlib import Path
 from typing import Callable
 
@@ -26,15 +24,22 @@ import numpy as np
 from PIL import Image
 
 NETWORK_PATH = Path("/tmp/camera_network.json")
-NETWORK_VERSION = "4"               # bump to force network rebuild
+NETWORK_VERSION = "5"               # bumped: now uses ground-truth camera_config.json
 JUNCTION_THRESHOLD_KM = 0.5         # cross-road proximity for junction edges
 RAMP_THRESHOLD_KM = 0.15            # same-road proximity to flag ramp candidates
 
-# ── Camera ID → Road mapping ───────────────────────────────────────────────────
-# "2" prefix covers CTE and SLE — resolved by lat/lon in cam_road()
+# ── Ground-truth camera config (read from actual LTA image overlays) ───────────
+_CONFIG_PATH = Path(__file__).parent / "camera_config.json"
+_CAMERA_CONFIG: dict[str, dict] = {}
+try:
+    _CAMERA_CONFIG = json.loads(_CONFIG_PATH.read_text())
+except Exception:
+    pass  # falls back to prefix table + FALLBACK_DIRECTIONS below
+
+# ── Camera ID → Road mapping (fallback for cameras not in config) ─────────────
 _PREFIX_ROAD: dict[str, str] = {
-    "1": "CTE",
-    "2": "CTE",   # refined to SLE by position below
+    "1": "KPE",
+    "2": "SLE",
     "3": "ECP",
     "4": "PIE",
     "5": "AYE",
@@ -45,41 +50,31 @@ _PREFIX_ROAD: dict[str, str] = {
 }
 _MCE_IDS = {"6702", "6703", "6704", "6705"}
 
-# SLE (Seletar Expressway) runs from TPE junction northward to Woodlands
-# "2" prefix cameras in this bounding box are SLE, not CTE
-_SLE_LAT_MIN, _SLE_LON_MIN = 1.395, 103.855
-
 
 def cam_road(cam_id: str, lat: float = 0.0, lon: float = 0.0) -> str:
-    """Authoritative camera → road mapping including SLE heuristic."""
+    """Authoritative camera → road mapping. Config takes priority over prefix table."""
+    cfg = _CAMERA_CONFIG.get(str(cam_id))
+    if cfg:
+        return cfg["road"]
     if cam_id in _MCE_IDS:
         return "MCE"
-    road = _PREFIX_ROAD.get(cam_id[0] if cam_id else "", "—")
-    # Refine "2" prefix: SLE vs CTE by position
-    if road == "CTE" and lat >= _SLE_LAT_MIN and lon >= _SLE_LON_MIN:
-        return "SLE"
-    return road
+    return _PREFIX_ROAD.get(cam_id[0] if cam_id else "", "—")
 
 
-# ── Known fallback direction labels per road ──────────────────────────────────
+# ── Known fallback direction labels per road (used only when camera not in config) ──
 FALLBACK_DIRECTIONS: dict[str, tuple[str, str]] = {
-    "CTE": ("towards Woodlands",    "towards City"),
-    "PIE": ("towards Changi",       "towards Tuas"),
-    "AYE": ("towards City",         "towards Tuas"),
+    "CTE": ("towards SLE",          "towards City"),
+    "PIE": ("towards Changi",       "towards Jurong"),
+    "AYE": ("towards Changi",       "towards Jurong"),
     "ECP": ("towards Changi",       "towards City"),
-    "MCE": ("towards Marina East",  "towards HarbourFront"),
+    "MCE": ("towards ECP",          "towards AYE"),
+    "KPE": ("towards ECP",          "towards TPE"),
     "TPE": ("towards Punggol",      "towards PIE"),
-    "BKE": ("towards Woodlands",    "towards PIE"),
-    "KJE": ("towards Kranji",       "towards PIE"),
-    "SLE": ("towards Woodlands",    "towards TPE"),
+    "BKE": ("towards TPE",          "towards Woodlands"),
+    "KJE": ("towards PIE",          "towards Kranji"),
+    "SLE": ("towards Woodlands",    "towards PIE"),
     "—":   ("Direction A",          "Direction B"),
 }
-
-_DIR_PATTERNS = [
-    r"towards?\s+([A-Za-z][A-Za-z\s]{2,20})(?:\s*$|\s+\d)",
-    r"to\s+([A-Za-z][A-Za-z\s]{2,20})(?:\s*$|\s+\d)",
-    r"([A-Za-z][A-Za-z\s]{2,20})\s*(?:bound|BND)",
-]
 
 
 # ── Geometry helpers ───────────────────────────────────────────────────────────
@@ -113,39 +108,6 @@ def _sort_by_road_axis(cams: list[dict]) -> list[dict]:
     center = np.array([lons.mean(), lats.mean()])
     projections = (np.column_stack([lons, lats]) - center) @ axis
     return [cams[i] for i in np.argsort(projections)]
-
-
-# ── OCR direction extraction ───────────────────────────────────────────────────
-
-def _ocr_direction(image: Image.Image, road: str) -> tuple[str, str]:
-    """Extract direction labels from LTA camera image text overlay via EasyOCR."""
-    try:
-        import easyocr
-        reader = easyocr.Reader(["en"], gpu=False, verbose=False,
-                                model_storage_directory="/tmp/easyocr_models")
-        w, h = image.size
-        crops = [
-            image.crop((0, 0, w, int(h * 0.15))),           # top strip
-            image.crop((0, int(h * 0.88), w, h)),            # bottom strip
-        ]
-        found = []
-        for crop in crops:
-            for text in reader.readtext(np.array(crop), detail=0):
-                text = text.strip()
-                for pattern in _DIR_PATTERNS:
-                    m = re.search(pattern, text, re.IGNORECASE)
-                    if m:
-                        label = m.group(1).strip().title()
-                        if label not in found:
-                            found.append(label)
-        if len(found) >= 2:
-            return f"towards {found[0]}", f"towards {found[1]}"
-        if len(found) == 1:
-            fb = FALLBACK_DIRECTIONS.get(road, ("Direction A", "Direction B"))
-            return f"towards {found[0]}", fb[1]
-    except Exception:
-        pass
-    return FALLBACK_DIRECTIONS.get(road, ("Direction A", "Direction B"))
 
 
 # ── Camera Network ─────────────────────────────────────────────────────────────
@@ -196,10 +158,17 @@ class CameraNetwork:
 
             for cam in ordered:
                 img = load_image_fn(cam["img_url"]) if cam["img_url"] else None
-                # Only attempt OCR if image loaded — otherwise use known fallbacks
-                # (fallbacks are accurate for Singapore expressways)
-                dir_a, dir_b = (_ocr_direction(img, road) if img
-                                else FALLBACK_DIRECTIONS.get(road, ("Direction A", "Direction B")))
+
+                # Direction labels: ground-truth config takes priority
+                cfg = _CAMERA_CONFIG.get(cam["id"])
+                if cfg:
+                    dir_a, dir_b = cfg["dir_a"], cfg["dir_b"]
+                    is_junction_cfg = cfg.get("is_junction", False)
+                    junction_roads_cfg = cfg.get("junction_roads", [])
+                else:
+                    dir_a, dir_b = FALLBACK_DIRECTIONS.get(road, ("Direction A", "Direction B"))
+                    is_junction_cfg = False
+                    junction_roads_cfg = []
                 self._labels[cam["id"]] = (dir_a, dir_b)
 
                 # Lane detection
@@ -215,6 +184,8 @@ class CameraNetwork:
                     dir_a=dir_a,
                     dir_b=dir_b,
                     is_ramp=cam["id"] in ramp_candidates,
+                    is_junction_cfg=is_junction_cfg,
+                    junction_roads=junction_roads_cfg,
                     lanes=lanes,
                     n_lanes=len(lanes),
                 )
@@ -236,7 +207,10 @@ class CameraNetwork:
         for cam_id in self.graph.nodes:
             vis = analyse_visibility(self.graph, cam_id)
             self.graph.nodes[cam_id]["visible_directions"] = vis
-            self.graph.nodes[cam_id]["is_junction_camera"] = len(vis) > 2
+            # A camera is a junction camera if: graph analysis OR config says so
+            is_junc_graph = len(vis) > 2
+            is_junc_cfg   = self.graph.nodes[cam_id].get("is_junction_cfg", False)
+            self.graph.nodes[cam_id]["is_junction_camera"] = is_junc_graph or is_junc_cfg
 
         s = self.stats()
         print(f"[CameraNetwork] {s['nodes']} nodes | "
