@@ -22,6 +22,11 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import networkx as nx
 
+# Extras at y_norm ≥ this are destination signposts (e.g. "towards Tuas" arrow
+# painted above the same lane as the mainline direction). Camera cannot visually
+# split them from the mainline, so we alias them rather than count twice.
+SIGNPOST_Y_THRESHOLD = 0.45
+
 
 def analyse_visibility(
     graph: "nx.DiGraph",
@@ -52,29 +57,37 @@ def analyse_visibility(
     own_road  = node.get("road", "—")
     dir_a_x   = float(node.get("dir_a_x", 0.75))
     dir_b_x   = float(node.get("dir_b_x", 0.25))
+    dir_a_y   = float(node.get("dir_a_y", 0.5))
+    dir_b_y   = float(node.get("dir_b_y", 0.5))
     extra     = node.get("extra_directions", []) or []
 
-    # 1. Mainline — always visible, anchored at (dir_?_x, 0.5)
-    for label, x in [(own_dir_a, dir_a_x), (own_dir_b, dir_b_x)]:
+    # 1. Mainline — always visible, anchored at (dir_?_x, dir_?_y).
+    # For head-on cameras, dir_a_y ≠ dir_b_y splits near-vs-far lanes.
+    for label, x, y in [(own_dir_a, dir_a_x, dir_a_y),
+                        (own_dir_b, dir_b_x, dir_b_y)]:
         if label and label not in seen_labels:
             directions.append({
                 "label": label,
                 "source_road": own_road,
                 "type": "mainline",
                 "x_norm": x,
-                "y_norm": 0.5,
+                "y_norm": y,
                 "order": len(directions),
             })
             seen_labels.add(label)
 
-    # 2. Ground-truth extra directions (junction/ramp arrows verified on image)
+    # 2. Ground-truth extra directions (junction/ramp arrows verified on image).
+    # Extras at y ≥ SIGNPOST_Y_THRESHOLD are signposts painted above mainline
+    # lanes — they cannot be visually separated from the mainline count, so
+    # they are skipped rather than double-counted.
     for ed in extra:
         label = ed.get("label")
         if not label or label in seen_labels:
             continue
         y_norm = float(ed.get("y_norm", 0.3))
-        # Upper-frame arrows (y < 0.35) are typically ramps entering/exiting;
-        # lower/mid arrows are merges running alongside the mainline.
+        if y_norm >= SIGNPOST_Y_THRESHOLD:
+            continue
+        # Upper-frame arrows (y < 0.35) are ramps; mid-frame arrows are merges.
         direction_type = "ramp" if y_norm < 0.35 else "merge"
         directions.append({
             "label": label,
@@ -86,34 +99,7 @@ def analyse_visibility(
         })
         seen_labels.add(label)
 
-    # 3. Graph-derived fallback — only if config gave no extras AND node has junction edges.
-    # Anchors unknown → place at upper-frame defaults by evenly spacing x.
-    if not extra:
-        graph_ramps: list[dict] = []
-        for _, neighbour_id, edge_data in graph.out_edges(str(cam_id), data=True):
-            if edge_data.get("type") != "junction":
-                continue
-            nb = graph.nodes.get(neighbour_id, {})
-            nb_road = nb.get("road", "—")
-            if nb_road == own_road:
-                continue
-            dist = edge_data.get("distance_km", 1.0)
-            direction_type = "ramp" if dist < 0.25 else "merge"
-            for label in [nb.get("dir_a"), nb.get("dir_b")]:
-                if label and label not in seen_labels:
-                    graph_ramps.append({
-                        "label": label,
-                        "source_road": nb_road,
-                        "type": direction_type,
-                    })
-                    seen_labels.add(label)
-        n = len(graph_ramps)
-        for i, d in enumerate(graph_ramps):
-            d["x_norm"] = (i + 1) / (n + 1)
-            d["y_norm"] = 0.2
-            d["order"] = len(directions)
-            directions.append(d)
-
+    # Config is authoritative for all 90 cameras — no graph fallback.
     return directions
 
 

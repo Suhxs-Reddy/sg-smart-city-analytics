@@ -24,7 +24,7 @@ import numpy as np
 from PIL import Image
 
 NETWORK_PATH = Path("/tmp/camera_network.json")
-NETWORK_VERSION = "6"               # bumped: wires arrow anchors + extra_directions into nodes
+NETWORK_VERSION = "7"               # v7: adds dir_a_y/dir_b_y for head-on cameras + signpost filter
 JUNCTION_THRESHOLD_KM = 0.5         # cross-road proximity for junction edges
 RAMP_THRESHOLD_KM = 0.15            # same-road proximity to flag ramp candidates
 
@@ -165,12 +165,15 @@ class CameraNetwork:
                     dir_a, dir_b = cfg["dir_a"], cfg["dir_b"]
                     dir_a_x = float(cfg.get("dir_a_x", 0.75))
                     dir_b_x = float(cfg.get("dir_b_x", 0.25))
+                    dir_a_y = float(cfg.get("dir_a_y", 0.5))
+                    dir_b_y = float(cfg.get("dir_b_y", 0.5))
                     is_junction_cfg = cfg.get("is_junction", False)
                     junction_roads_cfg = cfg.get("junction_roads", [])
                     extra_dirs_cfg = cfg.get("extra_directions", []) or []
                 else:
                     dir_a, dir_b = FALLBACK_DIRECTIONS.get(road, ("Direction A", "Direction B"))
                     dir_a_x, dir_b_x = 0.75, 0.25
+                    dir_a_y, dir_b_y = 0.5, 0.5
                     is_junction_cfg = False
                     junction_roads_cfg = []
                     extra_dirs_cfg = []
@@ -190,6 +193,8 @@ class CameraNetwork:
                     dir_b=dir_b,
                     dir_a_x=dir_a_x,
                     dir_b_x=dir_b_x,
+                    dir_a_y=dir_a_y,
+                    dir_b_y=dir_b_y,
                     extra_directions=extra_dirs_cfg,
                     is_ramp=cam["id"] in ramp_candidates,
                     is_junction_cfg=is_junction_cfg,
