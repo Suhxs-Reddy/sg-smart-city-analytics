@@ -18,9 +18,9 @@ jobs:
       - name: Install ruff
         run: pip install ruff
       - name: Lint
-        run: ruff check src/ tests/ app.py server.py
+        run: ruff check src/ tests/ app.py
       - name: Format check
-        run: ruff format src/ tests/ app.py server.py --check
+        run: ruff format src/ tests/ app.py --check
 
   # ── Core tests (no torch) ─────────────────────────────────────────────────
   test-core:
