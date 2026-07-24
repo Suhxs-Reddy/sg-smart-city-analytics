@@ -124,39 +124,44 @@ The [HF Space](https://huggingface.co/spaces/SuhxsReddy/SingaporeAnalytics) show
 ## Project Structure
 
 ```
-app.py                     # Streamlit dashboard (continuous inference + live map)
-server.py                  # FastAPI backend
+app.py                          # Streamlit dashboard — continuous inference + live map
 src/
-├── models/                # Novel CATI architecture
-│   ├── film.py            # FiLM conditioning layer
-│   ├── context_encoder.py # Environmental metadata encoder
-│   ├── attention.py       # SE-Attention, CBAM, Adaptive Gating
-│   └── cati_detector.py   # Full CATI detector + inference pipeline
-├── network/               # Singapore camera road network
-│   ├── camera_config.json # Ground-truth camera metadata
-│   ├── camera_network.py  # Road assignment
-│   ├── visibility.py      # Direction visibility analysis
-│   └── lane_detector.py   # Per-lane counting
+├── models/                     # Novel CATI architecture
+│   ├── film.py                 # FiLM conditioning layer
+│   ├── context_encoder.py      # Environmental metadata encoder
+│   ├── attention.py            # SE-Attention, CBAM, Adaptive Gating
+│   └── cati_detector.py        # Full CATI detector + inference pipeline
+├── network/                    # Singapore camera road network
+│   ├── camera_config.json      # Ground-truth camera metadata (90 cameras)
+│   ├── camera_network.py       # Road assignment + directed graph
+│   ├── visibility.py           # N-direction visibility analysis
+│   └── lane_detector.py        # Per-lane directional counting
 ├── training/
-│   ├── train_cati.py      # Two-phase training (AMP + EMA + stratified val)
-│   └── feature_extractor.py
+│   ├── train_cati.py           # Two-phase training (AMP + EMA + stratified val)
+│   └── feature_extractor.py    # Cached P3/P4/P5 features for Phase 1
 ├── ingestion/
-│   ├── collector.py       # Async LTA + weather + PM2.5 collector
+│   ├── collector.py            # Async LTA + weather + PM2.5 collector
 │   └── dataset_formatter.py
 ├── detection/
-│   └── detector.py        # YOLOv11 wrapper
+│   └── detector.py             # YOLOv11 wrapper
 ├── tracking/
-│   └── tracker.py         # BoT-SORT multi-object tracking
+│   └── tracker.py              # ByteTrack multi-object tracking
 ├── analytics/
-│   ├── predictor.py       # LSTM + GAT congestion forecasting
-│   ├── failure_analyzer.py
-│   └── drift_monitor.py   # PSI + KS-test model health
+│   ├── predictor.py            # LSTM + GAT congestion forecasting
+│   ├── failure_analyzer.py     # 6-category camera failure taxonomy
+│   └── drift_monitor.py        # PSI + KS-test model health
 └── api/
-    └── server.py          # FastAPI endpoints
-notebooks/
-├── analyse_cameras.ipynb  # Ground-truth camera config derivation
-├── train_yolo.ipynb       # Kaggle YOLO training
-└── upload_to_hf.ipynb     # Dataset upload utilities
+    └── server.py               # FastAPI backend (10 endpoints)
+notebooks/                      # Full pipeline, numbered in execution order
+├── 01_collect_data.ipynb       # Google Colab — collect from 90 LTA cameras
+├── 02_analyse_cameras.ipynb    # Derive ground-truth camera config from LTA images
+├── 03_prepare_dataset.ipynb    # Build training dataset from raw collections
+├── 04_train_yolo_baseline.ipynb# Kaggle GPU — train YOLOv11s baseline
+├── 05_train_cati_phase1.ipynb  # Train CATI context modules (backbone frozen)
+├── 06_train_cati_phase2.ipynb  # End-to-end fine-tuning with neck FiLM
+├── 07_evaluate_model.ipynb     # Evaluate on holdout set, stratified by condition
+├── 08_upload_to_hf.ipynb       # Push weights + dataset to HF Hub
+└── 09_demo.ipynb               # End-to-end inference demo
 ```
 
 ---
