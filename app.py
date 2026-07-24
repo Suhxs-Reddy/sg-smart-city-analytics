@@ -6,6 +6,7 @@ Frontend is pure analytics — no inference on click.
 
 from __future__ import annotations
 
+import contextlib
 import csv
 import os
 import sys
@@ -13,7 +14,7 @@ import tempfile
 import threading
 import time
 import urllib.request
-from io import BytesIO, StringIO
+from io import BytesIO
 from pathlib import Path
 
 import folium
@@ -33,7 +34,8 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-st.markdown("""
+st.markdown(
+    """
 <style>
 html, body { background-color: #0d0f14 !important; color: #e6edf3; }
 .stApp { background-color: #0d0f14; }
@@ -47,7 +49,9 @@ header[data-testid="stHeader"] { background: #161b22; border-bottom: 1px solid #
 .road-header { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; border-bottom: 1px solid #30363d; padding-bottom: 4px; margin: 16px 0 8px; }
 #MainMenu, footer, .stDeployButton { display: none !important; }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 LTA_API = "https://api.data.gov.sg/v1/transport/traffic-images"
@@ -58,9 +62,16 @@ DATASET_HUB_FILENAME = "cati_detections_v2.csv"  # v2: ground-truth anchors, N-d
 INFERENCE_INTERVAL = 90  # seconds between full sweeps
 
 ROAD_COLOR = {
-    "PIE": "#42a5f5", "CTE": "#ab47bc", "MCE": "#ef5350",
-    "TPE": "#26a69a", "BKE": "#ffa726", "AYE": "#66bb6a",
-    "KJE": "#ec407a", "SLE": "#7e57c2", "ECP": "#26c6da", "—": "#78909c",
+    "PIE": "#42a5f5",
+    "CTE": "#ab47bc",
+    "MCE": "#ef5350",
+    "TPE": "#26a69a",
+    "BKE": "#ffa726",
+    "AYE": "#66bb6a",
+    "KJE": "#ec407a",
+    "SLE": "#7e57c2",
+    "ECP": "#26c6da",
+    "—": "#78909c",
 }
 CATI_CLASSES = ["car", "motorcycle", "bus", "truck", "van", "lorry"]
 
@@ -69,13 +80,24 @@ HF_MODEL_REPO = "SuhxsReddy/cati-singapore"
 # Import authoritative road mapping (includes SLE heuristic)
 try:
     from src.network.camera_network import cam_road as _cam_road_fn
+
     def _cam_road(cam_id: str, lat: float = 0.0, lon: float = 0.0) -> str:
         return _cam_road_fn(cam_id, lat, lon)
 except Exception:
     # Fallback if src not available (local dev without Docker)
     _MCE_IDS = {"6702", "6703", "6704", "6705"}
-    _PREFIX_ROAD = {"1": "CTE", "2": "CTE", "3": "ECP", "4": "PIE",
-                    "5": "AYE", "6": "ECP", "7": "TPE", "8": "KJE", "9": "BKE"}
+    _PREFIX_ROAD = {
+        "1": "CTE",
+        "2": "CTE",
+        "3": "ECP",
+        "4": "PIE",
+        "5": "AYE",
+        "6": "ECP",
+        "7": "TPE",
+        "8": "KJE",
+        "9": "BKE",
+    }
+
     def _cam_road(cam_id: str, lat: float = 0.0, lon: float = 0.0) -> str:
         if cam_id in _MCE_IDS:
             return "MCE"
@@ -111,7 +133,9 @@ def fetch_weather() -> str:
 
 def load_image(url: str) -> Image.Image | None:
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Referer": "https://data.gov.sg/"})
+        req = urllib.request.Request(
+            url, headers={"User-Agent": "Mozilla/5.0", "Referer": "https://data.gov.sg/"}
+        )
         data = urllib.request.urlopen(req, timeout=6).read()
         return Image.open(BytesIO(data))
     except Exception:
@@ -123,6 +147,7 @@ def load_image(url: str) -> Image.Image | None:
 def get_model():
     try:
         from huggingface_hub import hf_hub_download
+
         from src.models.cati_detector import CATIBackboneWrapper, CATIConfig
 
         cati_path = hf_hub_download(repo_id=HF_MODEL_REPO, filename="cati_best.pt")
@@ -133,8 +158,9 @@ def get_model():
             neck_channels=[128, 256, 512],  # Phase 2 trained with neck FiLM
             img_size=1280,  # 2x resolution catches distant/small vehicles
         )
-        return CATIBackboneWrapper(yolo_model_path=yolo_path, config=config,
-                                   cati_weights_path=cati_path, device="cpu"), None
+        return CATIBackboneWrapper(
+            yolo_model_path=yolo_path, config=config, cati_weights_path=cati_path, device="cpu"
+        ), None
     except Exception as e:
         return None, str(e)
 
@@ -143,7 +169,7 @@ def get_model():
 @st.cache_resource(show_spinner=False)
 def get_state() -> dict:
     return {
-        "results": {},       # camera_id -> {count, by_class, road, lat, lon, ts}
+        "results": {},  # camera_id -> {count, by_class, road, lat, lon, ts}
         "running": False,
         "last_sweep": None,
         "cameras_done": 0,
@@ -224,14 +250,21 @@ def _direction_from_frames(dets1: list[dict], dets2: list[dict]) -> tuple[int, i
         dir_b += unmatched - round(unmatched * ratio)
 
     return dir_a, dir_b
+
+
 CATI_CLASS_COLORS = {
-    "car": "#58a6ff", "motorcycle": "#f78166", "bus": "#3fb950",
-    "truck": "#d29922", "van": "#bc8cff", "lorry": "#ff7b72",
+    "car": "#58a6ff",
+    "motorcycle": "#f78166",
+    "bus": "#3fb950",
+    "truck": "#d29922",
+    "van": "#bc8cff",
+    "lorry": "#ff7b72",
 }
 
 
 def _draw_boxes(image: Image.Image, detections: list[dict]) -> Image.Image:
     from PIL import ImageDraw, ImageFont
+
     img = image.convert("RGB")
     draw = ImageDraw.Draw(img)
     try:
@@ -257,6 +290,7 @@ def _run_inference_loop(state: dict, model):
     ANNOTATED_DIR.mkdir(exist_ok=True)
 
     from src.network.camera_network import CameraNetwork
+
     hf_token = os.environ.get("HF_TOKEN")
 
     # Try loading existing network from HF Hub first
@@ -279,20 +313,39 @@ def _run_inference_loop(state: dict, model):
         except Exception as e:
             state["network_error"] = str(e)
 
-    network_built = camera_net is not None
-
-    CURRENT_SCHEMA = ["timestamp", "camera_id", "road", "lat", "lon",
-                      "weather", "total_vehicles", "dir_a", "dir_b",
-                      "dir_a_label", "dir_b_label", "is_ramp",
-                      "is_junction_camera", "n_visible_directions",
-                      "lane_counts",
-                      "car", "motorcycle", "bus", "truck", "van", "lorry",
-                      "conf_threshold", "iou_threshold", "imgsz", "model_version"]
+    CURRENT_SCHEMA = [
+        "timestamp",
+        "camera_id",
+        "road",
+        "lat",
+        "lon",
+        "weather",
+        "total_vehicles",
+        "dir_a",
+        "dir_b",
+        "dir_a_label",
+        "dir_b_label",
+        "is_ramp",
+        "is_junction_camera",
+        "n_visible_directions",
+        "lane_counts",
+        "car",
+        "motorcycle",
+        "bus",
+        "truck",
+        "van",
+        "lorry",
+        "conf_threshold",
+        "iou_threshold",
+        "imgsz",
+        "model_version",
+    ]
 
     # On startup: pull existing v2 dataset from HF Hub (old cati_detections.csv preserved separately)
     if not DATASET_PATH.exists():
         try:
             from huggingface_hub import hf_hub_download
+
             hf_token = os.environ.get("HF_TOKEN")
             existing = hf_hub_download(
                 repo_id="SuhxsReddy/cati-singapore-dataset",
@@ -301,6 +354,7 @@ def _run_inference_loop(state: dict, model):
                 token=hf_token,
             )
             import shutil
+
             shutil.copy(existing, DATASET_PATH)
         except Exception:
             pass
@@ -316,7 +370,7 @@ def _run_inference_loop(state: dict, model):
             DATASET_PATH.unlink()
 
     write_header = not DATASET_PATH.exists()
-    dataset_file = open(DATASET_PATH, "a", newline="")
+    dataset_file = open(DATASET_PATH, "a", newline="")  # noqa: SIM115 — kept open across while-loop iterations
     writer = csv.writer(dataset_file)
     if write_header:
         writer.writerow(CURRENT_SCHEMA)
@@ -333,7 +387,15 @@ def _run_inference_loop(state: dict, model):
 
         try:
             r = requests.get(NEA_API, timeout=8)
-            weather = r.json().get("items", [{}])[0].get("periods", [{}])[0].get("regions", {}).get("central", "clear") if r.ok else "clear"
+            weather = (
+                r.json()
+                .get("items", [{}])[0]
+                .get("periods", [{}])[0]
+                .get("regions", {})
+                .get("central", "clear")
+                if r.ok
+                else "clear"
+            )
         except Exception:
             weather = "clear"
 
@@ -360,7 +422,9 @@ def _run_inference_loop(state: dict, model):
                 with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
                     img.save(tmp.name)
                     model.config.conf_threshold = 0.08
-                    model.config.iou_threshold = 0.20  # lower → separate side-by-side + articulated vehicles
+                    model.config.iou_threshold = (
+                        0.20  # lower → separate side-by-side + articulated vehicles
+                    )
                     result = model.predict(
                         image_path=tmp.name,
                         camera_id=int(cam_id) % 90,
@@ -400,19 +464,25 @@ def _run_inference_loop(state: dict, model):
 
                 counts = {c: 0 for c in CATI_CLASSES}
                 for det in result["detections"]:
-                    cls = CATI_CLASSES[det["class_id"]] if det["class_id"] < len(CATI_CLASSES) else None
+                    cls = (
+                        CATI_CLASSES[det["class_id"]]
+                        if det["class_id"] < len(CATI_CLASSES)
+                        else None
+                    )
                     if cls:
                         counts[cls] += 1
 
                 # Use lane positions for dir_a/dir_b if network is ready,
                 # otherwise fall back to 2-frame motion tracking
                 import json as _json
+
                 lane_counts_list: list[dict] = []
 
                 if camera_net:
                     from src.network.visibility import summarise_directions
+
                     vis_dirs = camera_net.visible_directions(cam_id)
-                    lanes    = camera_net.lanes(cam_id)
+                    lanes = camera_net.lanes(cam_id)
 
                     if vis_dirs:
                         # Full N-direction summary (handles junctions)
@@ -422,15 +492,19 @@ def _run_inference_loop(state: dict, model):
                     else:
                         # Network built but no visibility yet — use frame tracking
                         da, db = _direction_from_frames(result["detections"], dets2)
-                        vis_dirs = [{"label": "Direction A", "count": da},
-                                    {"label": "Direction B", "count": db}]
+                        vis_dirs = [
+                            {"label": "Direction A", "count": da},
+                            {"label": "Direction B", "count": db},
+                        ]
                         lane_counts_list = vis_dirs
 
                     dir_a_label, dir_b_label = camera_net.direction_labels(cam_id)
                 else:
                     da, db = _direction_from_frames(result["detections"], dets2)
-                    lane_counts_list = [{"label": "Direction A", "count": da},
-                                        {"label": "Direction B", "count": db}]
+                    lane_counts_list = [
+                        {"label": "Direction A", "count": da},
+                        {"label": "Direction B", "count": db},
+                    ]
                     dir_a_label, dir_b_label = "Direction A", "Direction B"
 
                 # dir_a / dir_b totals (mainline only, for backwards compatibility)
@@ -457,16 +531,32 @@ def _run_inference_loop(state: dict, model):
                     "ts": ts,
                 }
 
-                writer.writerow([ts, cam_id, road, lat, lon, weather,
-                                 result["num_detections"], dir_a_count, dir_b_count,
-                                 dir_a_label, dir_b_label, is_ramp,
-                                 is_junction_camera, n_visible_directions,
-                                 _json.dumps(lane_counts_list)]
-                                + [counts[c] for c in CATI_CLASSES]
-                                + [model.config.conf_threshold,
-                                   model.config.iou_threshold,
-                                   model.config.img_size,
-                                   "cati-phase2-neck"])
+                writer.writerow(
+                    [
+                        ts,
+                        cam_id,
+                        road,
+                        lat,
+                        lon,
+                        weather,
+                        result["num_detections"],
+                        dir_a_count,
+                        dir_b_count,
+                        dir_a_label,
+                        dir_b_label,
+                        is_ramp,
+                        is_junction_camera,
+                        n_visible_directions,
+                        _json.dumps(lane_counts_list),
+                    ]
+                    + [counts[c] for c in CATI_CLASSES]
+                    + [
+                        model.config.conf_threshold,
+                        model.config.iou_threshold,
+                        model.config.img_size,
+                        "cati-phase2-neck",
+                    ]
+                )
                 dataset_file.flush()
 
                 # Save annotated image on first sweep only
@@ -487,15 +577,14 @@ def _run_inference_loop(state: dict, model):
 
         # Push network to HF Hub after first sweep so it persists across restarts
         if is_first_sweep and camera_net:
-            try:
+            with contextlib.suppress(Exception):
                 camera_net.push_to_hub(hf_token)
-            except Exception:
-                pass
 
         # Push annotated images after first sweep
         if is_first_sweep:
             try:
                 from huggingface_hub import HfApi
+
                 hf_token = os.environ.get("HF_TOKEN")
                 if hf_token:
                     api = HfApi()
@@ -514,11 +603,17 @@ def _run_inference_loop(state: dict, model):
         # Push dataset to HF Hub after every sweep so restarts don't lose data
         try:
             from huggingface_hub import HfApi
+
             hf_token = os.environ.get("HF_TOKEN")
             if hf_token and DATASET_PATH.exists():
                 api = HfApi()
-                api.create_repo("SuhxsReddy/cati-singapore-dataset", token=hf_token,
-                                repo_type="dataset", exist_ok=True, private=False)
+                api.create_repo(
+                    "SuhxsReddy/cati-singapore-dataset",
+                    token=hf_token,
+                    repo_type="dataset",
+                    exist_ok=True,
+                    private=False,
+                )
                 with open(DATASET_PATH, "rb") as f:
                     api.upload_file(
                         path_or_fileobj=f,
@@ -578,7 +673,9 @@ with h1:
         push_info = f" · Last push: {state.get('last_push', 'never')}"
         if state.get("push_error"):
             push_info = f" · Push error: {state['push_error']}"
-        st.caption(f"Last sweep {ago}s ago · Next in ~{max(0, INFERENCE_INTERVAL - ago)}s{push_info}")
+        st.caption(
+            f"Last sweep {ago}s ago · Next in ~{max(0, INFERENCE_INTERVAL - ago)}s{push_info}"
+        )
     elif state["error"]:
         st.error(f"⚠ {state['error']}")
     else:
@@ -587,9 +684,15 @@ with h1:
 with h2:
     st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
     if active_cams > 0:
-        st.markdown('<span style="display:inline-flex;align-items:center;gap:5px;background:rgba(0,230,118,0.12);color:#00e676;border:1px solid #00e676;border-radius:20px;padding:3px 10px;font-size:0.75rem;font-weight:600">● LIVE</span>', unsafe_allow_html=True)
+        st.markdown(
+            '<span style="display:inline-flex;align-items:center;gap:5px;background:rgba(0,230,118,0.12);color:#00e676;border:1px solid #00e676;border-radius:20px;padding:3px 10px;font-size:0.75rem;font-weight:600">● LIVE</span>',
+            unsafe_allow_html=True,
+        )
     else:
-        st.markdown('<span style="display:inline-flex;align-items:center;gap:5px;background:rgba(244,67,54,0.12);color:#f44336;border:1px solid #f44336;border-radius:20px;padding:3px 10px;font-size:0.75rem;font-weight:600">● LOADING</span>', unsafe_allow_html=True)
+        st.markdown(
+            '<span style="display:inline-flex;align-items:center;gap:5px;background:rgba(244,67,54,0.12);color:#f44336;border:1px solid #f44336;border-radius:20px;padding:3px 10px;font-size:0.75rem;font-weight:600">● LOADING</span>',
+            unsafe_allow_html=True,
+        )
 
 st.markdown("---")
 
@@ -599,7 +702,9 @@ k1.metric("Total Vehicles", total_vehicles)
 k2.metric("Cameras Analysed", f"{active_cams} / {len(cameras)}")
 k3.metric("Weather (Central)", weather)
 k4.metric("Last Updated", time.strftime("%H:%M:%S"))
-k5.metric("Dataset Records", sum(1 for _ in open(DATASET_PATH)) - 1 if DATASET_PATH.exists() else 0)
+k5.metric(
+    "Dataset Records", DATASET_PATH.read_text().count("\n") - 1 if DATASET_PATH.exists() else 0
+)
 
 st.markdown("---")
 
@@ -610,7 +715,9 @@ tab_map, tab_roads, tab_dataset = st.tabs(["🗺️  Map", "📊  Road Analytics
 # TAB 1 — MAP with vehicle count overlays
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_map:
-    m = folium.Map(location=SG_CENTER, zoom_start=11, tiles="CartoDB dark_matter", prefer_canvas=True)
+    m = folium.Map(
+        location=SG_CENTER, zoom_start=11, tiles="CartoDB dark_matter", prefer_canvas=True
+    )
 
     for cam in cameras:
         cam_id = cam.get("camera_id", "")
@@ -658,13 +765,18 @@ with tab_roads:
     else:
         # Aggregate by road
         road_data: dict[str, dict] = {}
-        for cam_id, res in results.items():
+        for _cam_id, res in results.items():
             road = res["road"]
             if road not in road_data:
-                road_data[road] = {"total": 0, "dir_a": 0, "dir_b": 0,
-                                   "dir_a_label": res.get("dir_a_label", "Dir A"),
-                                   "dir_b_label": res.get("dir_b_label", "Dir B"),
-                                   "cameras": 0, "by_class": {c: 0 for c in CATI_CLASSES}}
+                road_data[road] = {
+                    "total": 0,
+                    "dir_a": 0,
+                    "dir_b": 0,
+                    "dir_a_label": res.get("dir_a_label", "Dir A"),
+                    "dir_b_label": res.get("dir_b_label", "Dir B"),
+                    "cameras": 0,
+                    "by_class": {c: 0 for c in CATI_CLASSES},
+                }
             road_data[road]["total"] += res["count"]
             road_data[road]["dir_a"] += res.get("dir_a", 0)
             road_data[road]["dir_b"] += res.get("dir_b", 0)
@@ -677,15 +789,18 @@ with tab_roads:
 
         # Top-level road summary
         cols = st.columns(len(present)) if present else []
-        for col, road in zip(cols, present):
+        for col, road in zip(cols, present, strict=False):
             color = ROAD_COLOR.get(road, "#546e7a")
             d = road_data[road]
-            col.markdown(f"""
+            col.markdown(
+                f"""
             <div class="kpi">
-                <div class="kpi-val" style="color:{color}">{d['total']}</div>
+                <div class="kpi-val" style="color:{color}">{d["total"]}</div>
                 <div class="kpi-lbl">{road}</div>
-                <div style="font-size:0.65rem;color:#8b949e">{d['cameras']} cams</div>
-            </div>""", unsafe_allow_html=True)
+                <div style="font-size:0.65rem;color:#8b949e">{d["cameras"]} cams</div>
+            </div>""",
+                unsafe_allow_html=True,
+            )
 
         st.markdown("---")
 
@@ -693,7 +808,10 @@ with tab_roads:
         for road in present:
             d = road_data[road]
             color = ROAD_COLOR.get(road, "#546e7a")
-            st.markdown(f'<div class="road-header" style="color:{color}">{road} · {d["total"]} vehicles across {d["cameras"]} cameras</div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="road-header" style="color:{color}">{road} · {d["total"]} vehicles across {d["cameras"]} cameras</div>',
+                unsafe_allow_html=True,
+            )
 
             dir_col, cls_col = st.columns([1, 2])
             with dir_col:
@@ -704,7 +822,7 @@ with tab_roads:
             with cls_col:
                 st.markdown("**By class**")
                 cls_cols = st.columns(len(CATI_CLASSES))
-                for col, cls in zip(cls_cols, CATI_CLASSES):
+                for col, cls in zip(cls_cols, CATI_CLASSES, strict=False):
                     col.metric(cls.capitalize(), d["by_class"].get(cls, 0))
 
         # Most congested cameras
@@ -723,7 +841,7 @@ with tab_roads:
                 f'<div style="background:{color};height:12px;width:{bar_width}px;border-radius:3px"></div>'
                 f'<span style="font-size:0.75rem">{res["count"]} &nbsp;'
                 f'<span style="color:#8b949e;font-size:0.65rem">({da}↑ {db}↓)</span></span>'
-                f'</div>',
+                f"</div>",
                 unsafe_allow_html=True,
             )
 
@@ -732,13 +850,16 @@ with tab_roads:
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_dataset:
     st.markdown("### Detection Dataset")
-    st.caption("Every CATI inference result is logged here. Download to publish on HuggingFace Datasets.")
+    st.caption(
+        "Every CATI inference result is logged here. Download to publish on HuggingFace Datasets."
+    )
 
     if not DATASET_PATH.exists() or DATASET_PATH.stat().st_size == 0:
         st.info("Dataset is empty — inference is still running its first sweep.")
     else:
         try:
             import pandas as pd
+
             df = pd.read_csv(DATASET_PATH)
             st.metric("Total records", len(df))
             st.dataframe(df.tail(50), use_container_width=True)

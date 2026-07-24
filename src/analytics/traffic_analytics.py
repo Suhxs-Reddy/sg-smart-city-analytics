@@ -25,7 +25,7 @@ Usage:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -165,7 +165,7 @@ class Detection:
     conf: float
 
 
-class LOS(str, Enum):
+class LOS(StrEnum):
     A = "A"  # Free flow
     B = "B"  # Reasonably free flow
     C = "C"  # Stable flow

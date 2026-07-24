@@ -14,27 +14,26 @@ NETWORK_VERSION must be bumped whenever build logic changes.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import math
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 import networkx as nx
 import numpy as np
 from PIL import Image
 
 NETWORK_PATH = Path("/tmp/camera_network.json")
-NETWORK_VERSION = "7"               # v7: adds dir_a_y/dir_b_y for head-on cameras + signpost filter
-JUNCTION_THRESHOLD_KM = 0.5         # cross-road proximity for junction edges
-RAMP_THRESHOLD_KM = 0.15            # same-road proximity to flag ramp candidates
+NETWORK_VERSION = "7"  # v7: adds dir_a_y/dir_b_y for head-on cameras + signpost filter
+JUNCTION_THRESHOLD_KM = 0.5  # cross-road proximity for junction edges
+RAMP_THRESHOLD_KM = 0.15  # same-road proximity to flag ramp candidates
 
 # ── Ground-truth camera config (read from actual LTA image overlays) ───────────
 _CONFIG_PATH = Path(__file__).parent / "camera_config.json"
 _CAMERA_CONFIG: dict[str, dict] = {}
-try:
+with contextlib.suppress(Exception):
     _CAMERA_CONFIG = json.loads(_CONFIG_PATH.read_text())
-except Exception:
-    pass  # falls back to prefix table + FALLBACK_DIRECTIONS below
 
 # ── Camera ID → Road mapping (fallback for cameras not in config) ─────────────
 _PREFIX_ROAD: dict[str, str] = {
@@ -43,7 +42,7 @@ _PREFIX_ROAD: dict[str, str] = {
     "3": "ECP",
     "4": "PIE",
     "5": "AYE",
-    "6": "ECP",   # 6702-6705 = MCE handled separately
+    "6": "ECP",  # 6702-6705 = MCE handled separately
     "7": "TPE",
     "8": "KJE",
     "9": "BKE",
@@ -63,29 +62,31 @@ def cam_road(cam_id: str, lat: float = 0.0, lon: float = 0.0) -> str:
 
 # ── Known fallback direction labels per road (used only when camera not in config) ──
 FALLBACK_DIRECTIONS: dict[str, tuple[str, str]] = {
-    "CTE": ("towards SLE",          "towards City"),
-    "PIE": ("towards Changi",       "towards Jurong"),
-    "AYE": ("towards Changi",       "towards Jurong"),
-    "ECP": ("towards Changi",       "towards City"),
-    "MCE": ("towards ECP",          "towards AYE"),
-    "KPE": ("towards ECP",          "towards TPE"),
-    "TPE": ("towards Punggol",      "towards PIE"),
-    "BKE": ("towards TPE",          "towards Woodlands"),
-    "KJE": ("towards PIE",          "towards Kranji"),
-    "SLE": ("towards Woodlands",    "towards PIE"),
-    "—":   ("Direction A",          "Direction B"),
+    "CTE": ("towards SLE", "towards City"),
+    "PIE": ("towards Changi", "towards Jurong"),
+    "AYE": ("towards Changi", "towards Jurong"),
+    "ECP": ("towards Changi", "towards City"),
+    "MCE": ("towards ECP", "towards AYE"),
+    "KPE": ("towards ECP", "towards TPE"),
+    "TPE": ("towards Punggol", "towards PIE"),
+    "BKE": ("towards TPE", "towards Woodlands"),
+    "KJE": ("towards PIE", "towards Kranji"),
+    "SLE": ("towards Woodlands", "towards PIE"),
+    "—": ("Direction A", "Direction B"),
 }
 
 
 # ── Geometry helpers ───────────────────────────────────────────────────────────
 
+
 def haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     R = 6371.0
     dlat = math.radians(lat2 - lat1)
     dlon = math.radians(lon2 - lon1)
-    a = (math.sin(dlat / 2) ** 2
-         + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2))
-         * math.sin(dlon / 2) ** 2)
+    a = (
+        math.sin(dlat / 2) ** 2
+        + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) ** 2
+    )
     return R * 2 * math.asin(math.sqrt(a))
 
 
@@ -112,6 +113,7 @@ def _sort_by_road_axis(cams: list[dict]) -> list[dict]:
 
 # ── Camera Network ─────────────────────────────────────────────────────────────
 
+
 class CameraNetwork:
     """Directed road network of Singapore LTA cameras."""
 
@@ -137,11 +139,15 @@ class CameraNetwork:
             lat = float(loc.get("latitude", 0))
             lon = float(loc.get("longitude", 0))
             road = cam_road(cam_id, lat, lon)
-            by_road.setdefault(road, []).append({
-                "id": cam_id, "road": road,
-                "lat": lat, "lon": lon,
-                "img_url": cam.get("image", ""),
-            })
+            by_road.setdefault(road, []).append(
+                {
+                    "id": cam_id,
+                    "road": road,
+                    "lat": lat,
+                    "lon": lon,
+                    "img_url": cam.get("image", ""),
+                }
+            )
 
         # Add nodes + directed road edges
         for road, cams in by_road.items():
@@ -149,7 +155,7 @@ class CameraNetwork:
 
             # Detect ramp candidates: same-road neighbour within RAMP_THRESHOLD_KM
             ramp_candidates: set[str] = set()
-            for i, a in enumerate(ordered):
+            for _i, a in enumerate(ordered):
                 for b in ordered:
                     if a["id"] == b["id"]:
                         continue
@@ -180,7 +186,8 @@ class CameraNetwork:
                 self._labels[cam["id"]] = (dir_a, dir_b)
 
                 # Lane detection
-                from src.network.lane_detector import detect_lanes, apply_road_directions
+                from src.network.lane_detector import apply_road_directions, detect_lanes
+
                 lanes = detect_lanes(img, road) if img else []
                 lanes = apply_road_directions(lanes, dir_a, dir_b)
 
@@ -207,28 +214,33 @@ class CameraNetwork:
             for i in range(len(ordered) - 1):
                 a, b = ordered[i], ordered[i + 1]
                 dist = round(haversine(a["lat"], a["lon"], b["lat"], b["lon"]), 3)
-                self.graph.add_edge(a["id"], b["id"], type="road", road=road,
-                                    direction="dir_a", distance_km=dist)
-                self.graph.add_edge(b["id"], a["id"], type="road", road=road,
-                                    direction="dir_b", distance_km=dist)
+                self.graph.add_edge(
+                    a["id"], b["id"], type="road", road=road, direction="dir_a", distance_km=dist
+                )
+                self.graph.add_edge(
+                    b["id"], a["id"], type="road", road=road, direction="dir_b", distance_km=dist
+                )
 
         # Junction edges across roads
         self._add_junction_edges()
 
         # Visibility analysis — run after junction edges are built
         from src.network.visibility import analyse_visibility
+
         for cam_id in self.graph.nodes:
             vis = analyse_visibility(self.graph, cam_id)
             self.graph.nodes[cam_id]["visible_directions"] = vis
             # A camera is a junction camera if: graph analysis OR config says so
             is_junc_graph = len(vis) > 2
-            is_junc_cfg   = self.graph.nodes[cam_id].get("is_junction_cfg", False)
+            is_junc_cfg = self.graph.nodes[cam_id].get("is_junction_cfg", False)
             self.graph.nodes[cam_id]["is_junction_camera"] = is_junc_graph or is_junc_cfg
 
         s = self.stats()
-        print(f"[CameraNetwork] {s['nodes']} nodes | "
-              f"{s['road_edges']} road edges | {s['junction_edges']} junction edges | "
-              f"{s['ramp_candidates']} ramp candidates")
+        print(
+            f"[CameraNetwork] {s['nodes']} nodes | "
+            f"{s['road_edges']} road edges | {s['junction_edges']} junction edges | "
+            f"{s['ramp_candidates']} ramp candidates"
+        )
 
         if save:
             self._save()
@@ -236,15 +248,13 @@ class CameraNetwork:
     def _add_junction_edges(self) -> None:
         nodes = list(self.graph.nodes(data=True))
         for i, (id1, d1) in enumerate(nodes):
-            for id2, d2 in nodes[i + 1:]:
+            for id2, d2 in nodes[i + 1 :]:
                 if d1["road"] == d2["road"]:
                     continue
                 dist = haversine(d1["lat"], d1["lon"], d2["lat"], d2["lon"])
                 if dist <= JUNCTION_THRESHOLD_KM:
-                    self.graph.add_edge(id1, id2, type="junction",
-                                        distance_km=round(dist, 3))
-                    self.graph.add_edge(id2, id1, type="junction",
-                                        distance_km=round(dist, 3))
+                    self.graph.add_edge(id1, id2, type="junction", distance_km=round(dist, 3))
+                    self.graph.add_edge(id2, id1, type="junction", distance_km=round(dist, 3))
 
     # ── Query ──────────────────────────────────────────────────────────────────
 
@@ -280,9 +290,13 @@ class CameraNetwork:
                 ramp_count += 1
         road_e = sum(1 for *_, d in self.graph.edges(data=True) if d.get("type") == "road")
         junc_e = sum(1 for *_, d in self.graph.edges(data=True) if d.get("type") == "junction")
-        return {"nodes": self.graph.number_of_nodes(), "road_edges": road_e,
-                "junction_edges": junc_e, "ramp_candidates": ramp_count,
-                "cameras_by_road": by_road}
+        return {
+            "nodes": self.graph.number_of_nodes(),
+            "road_edges": road_e,
+            "junction_edges": junc_e,
+            "ramp_candidates": ramp_count,
+            "cameras_by_road": by_road,
+        }
 
     # ── Persistence ────────────────────────────────────────────────────────────
 
@@ -290,28 +304,31 @@ class CameraNetwork:
         data = {
             "version": NETWORK_VERSION,
             "nodes": {n: dict(self.graph.nodes[n]) for n in self.graph.nodes},
-            "edges": [{"from": u, "to": v, **self.graph.edges[u, v]}
-                      for u, v in self.graph.edges],
+            "edges": [{"from": u, "to": v, **self.graph.edges[u, v]} for u, v in self.graph.edges],
         }
         NETWORK_PATH.write_text(json.dumps(data, indent=2))
         print(f"[CameraNetwork] Saved to {NETWORK_PATH}")
 
     @classmethod
-    def load(cls) -> "CameraNetwork | None":
+    def load(cls) -> CameraNetwork | None:
         if not NETWORK_PATH.exists():
             return None
         try:
             data = json.loads(NETWORK_PATH.read_text())
             # Version check — stale network triggers rebuild
             if data.get("version") != NETWORK_VERSION:
-                print(f"[CameraNetwork] Stale version {data.get('version')} != {NETWORK_VERSION}, rebuilding")
+                print(
+                    f"[CameraNetwork] Stale version {data.get('version')} != {NETWORK_VERSION}, rebuilding"
+                )
                 NETWORK_PATH.unlink()
                 return None
             net = cls()
             for node_id, attrs in data["nodes"].items():
                 net.graph.add_node(node_id, **attrs)
-                net._labels[node_id] = (attrs.get("dir_a", "Direction A"),
-                                        attrs.get("dir_b", "Direction B"))
+                net._labels[node_id] = (
+                    attrs.get("dir_a", "Direction A"),
+                    attrs.get("dir_b", "Direction B"),
+                )
             for edge in data["edges"]:
                 src, dst = edge.pop("from"), edge.pop("to")
                 net.graph.add_edge(src, dst, **edge)
@@ -326,32 +343,37 @@ class CameraNetwork:
             return
         try:
             from huggingface_hub import HfApi
+
             HfApi().upload_file(
                 path_or_fileobj=str(NETWORK_PATH),
                 path_in_repo="camera_network.json",
                 repo_id="SuhxsReddy/cati-singapore-dataset",
-                repo_type="dataset", token=token,
+                repo_type="dataset",
+                token=token,
             )
             print("[CameraNetwork] Pushed to HF Hub")
         except Exception as e:
             print(f"[CameraNetwork] Hub push failed: {e}")
 
     @classmethod
-    def load_from_hub(cls, token: str | None = None) -> "CameraNetwork | None":
+    def load_from_hub(cls, token: str | None = None) -> CameraNetwork | None:
         # Try local first
         local = cls.load()
         if local:
             return local
         # Pull from HF Hub
         try:
-            from huggingface_hub import hf_hub_download
             import shutil
+
+            from huggingface_hub import hf_hub_download
+
             path = hf_hub_download(
                 repo_id="SuhxsReddy/cati-singapore-dataset",
                 filename="camera_network.json",
-                repo_type="dataset", token=token,
+                repo_type="dataset",
+                token=token,
             )
             shutil.copy(path, NETWORK_PATH)
-            return cls.load()   # version check inside
+            return cls.load()  # version check inside
         except Exception:
             return None

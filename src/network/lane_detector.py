@@ -22,14 +22,22 @@ Lane count prior per road (Singapore LTA):
 from __future__ import annotations
 
 import math
+
 import numpy as np
 from PIL import Image
 
-
 # Expected lane count per road — used as clustering prior
 ROAD_LANES: dict[str, int] = {
-    "CTE": 3, "PIE": 3, "AYE": 3, "ECP": 3,
-    "MCE": 3, "TPE": 3, "BKE": 2, "KJE": 2, "SLE": 2, "—": 3,
+    "CTE": 3,
+    "PIE": 3,
+    "AYE": 3,
+    "ECP": 3,
+    "MCE": 3,
+    "TPE": 3,
+    "BKE": 2,
+    "KJE": 2,
+    "SLE": 2,
+    "—": 3,
 }
 
 
@@ -113,13 +121,15 @@ def detect_lanes(
     for i in range(len(boundaries) - 1):
         x_l = boundaries[i] / w
         x_r = boundaries[i + 1] / w
-        lanes.append({
-            "lane_idx": i,
-            "x_center": (x_l + x_r) / 2,
-            "x_left": x_l,
-            "x_right": x_r,
-            "direction": "unknown",
-        })
+        lanes.append(
+            {
+                "lane_idx": i,
+                "x_center": (x_l + x_r) / 2,
+                "x_left": x_l,
+                "x_right": x_r,
+                "direction": "unknown",
+            }
+        )
 
     return lanes if lanes else _equal_strips(n_lanes)
 
@@ -164,6 +174,7 @@ def apply_road_directions(lanes: list[dict], dir_a: str, dir_b: str) -> list[dic
 
 # ── Internal helpers ───────────────────────────────────────────────────────────
 
+
 def _equal_strips(n_lanes: int) -> list[dict]:
     """Fallback: divide image into N equal vertical strips."""
     return [
@@ -200,10 +211,12 @@ def _cluster_to_boundaries(
             # Assign each point to nearest centre
             dists = np.abs(pts[:, None] - centers[None, :])
             labels = dists.argmin(axis=1)
-            new_centers = np.array([
-                pts[labels == k].mean() if np.any(labels == k) else centers[k]
-                for k in range(len(centers))
-            ])
+            new_centers = np.array(
+                [
+                    pts[labels == k].mean() if np.any(labels == k) else centers[k]
+                    for k in range(len(centers))
+                ]
+            )
             if np.allclose(centers, new_centers, atol=1.0):
                 break
             centers = new_centers

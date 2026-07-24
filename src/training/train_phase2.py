@@ -464,7 +464,7 @@ class CATIPhase2Trainer:
         if Path(cati_weights_path).exists():
             ckpt = torch.load(cati_weights_path, map_location=_device, weights_only=False)
             state = ckpt.get("model_state_dict", ckpt)
-            missing, unexpected = cati.load_state_dict(state, strict=False)
+            missing, _unexpected = cati.load_state_dict(state, strict=False)
             if missing:
                 logger.warning(f"CATI eval: missing keys: {missing[:5]}")
             logger.info(f"CATI eval weights loaded from {cati_weights_path}")

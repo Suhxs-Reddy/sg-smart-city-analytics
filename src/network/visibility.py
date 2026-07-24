@@ -29,7 +29,7 @@ SIGNPOST_Y_THRESHOLD = 0.45
 
 
 def analyse_visibility(
-    graph: "nx.DiGraph",
+    graph: nx.DiGraph,
     cam_id: str,
 ) -> list[dict]:
     """
@@ -54,26 +54,27 @@ def analyse_visibility(
 
     own_dir_a = node.get("dir_a", "Direction A")
     own_dir_b = node.get("dir_b", "Direction B")
-    own_road  = node.get("road", "—")
-    dir_a_x   = float(node.get("dir_a_x", 0.75))
-    dir_b_x   = float(node.get("dir_b_x", 0.25))
-    dir_a_y   = float(node.get("dir_a_y", 0.5))
-    dir_b_y   = float(node.get("dir_b_y", 0.5))
-    extra     = node.get("extra_directions", []) or []
+    own_road = node.get("road", "—")
+    dir_a_x = float(node.get("dir_a_x", 0.75))
+    dir_b_x = float(node.get("dir_b_x", 0.25))
+    dir_a_y = float(node.get("dir_a_y", 0.5))
+    dir_b_y = float(node.get("dir_b_y", 0.5))
+    extra = node.get("extra_directions", []) or []
 
     # 1. Mainline — always visible, anchored at (dir_?_x, dir_?_y).
     # For head-on cameras, dir_a_y ≠ dir_b_y splits near-vs-far lanes.
-    for label, x, y in [(own_dir_a, dir_a_x, dir_a_y),
-                        (own_dir_b, dir_b_x, dir_b_y)]:
+    for label, x, y in [(own_dir_a, dir_a_x, dir_a_y), (own_dir_b, dir_b_x, dir_b_y)]:
         if label and label not in seen_labels:
-            directions.append({
-                "label": label,
-                "source_road": own_road,
-                "type": "mainline",
-                "x_norm": x,
-                "y_norm": y,
-                "order": len(directions),
-            })
+            directions.append(
+                {
+                    "label": label,
+                    "source_road": own_road,
+                    "type": "mainline",
+                    "x_norm": x,
+                    "y_norm": y,
+                    "order": len(directions),
+                }
+            )
             seen_labels.add(label)
 
     # 2. Ground-truth extra directions (junction/ramp arrows verified on image).
@@ -89,21 +90,23 @@ def analyse_visibility(
             continue
         # Upper-frame arrows (y < 0.35) are ramps; mid-frame arrows are merges.
         direction_type = "ramp" if y_norm < 0.35 else "merge"
-        directions.append({
-            "label": label,
-            "source_road": ed.get("source_road", own_road),
-            "type": direction_type,
-            "x_norm": float(ed.get("x_norm", 0.5)),
-            "y_norm": y_norm,
-            "order": len(directions),
-        })
+        directions.append(
+            {
+                "label": label,
+                "source_road": ed.get("source_road", own_road),
+                "type": direction_type,
+                "x_norm": float(ed.get("x_norm", 0.5)),
+                "y_norm": y_norm,
+                "order": len(directions),
+            }
+        )
         seen_labels.add(label)
 
     # Config is authoritative for all 90 cameras — no graph fallback.
     return directions
 
 
-def is_junction_camera(graph: "nx.DiGraph", cam_id: str) -> bool:
+def is_junction_camera(graph: nx.DiGraph, cam_id: str) -> bool:
     """True if camera has junction edges to cameras on other roads."""
     own_road = graph.nodes.get(str(cam_id), {}).get("road", "—")
     for _, _, d in graph.out_edges(str(cam_id), data=True):
@@ -114,8 +117,8 @@ def is_junction_camera(graph: "nx.DiGraph", cam_id: str) -> bool:
     return False
 
 
-_ASPECT = 1.78   # typical LTA frame aspect — y spread counts ~1.78x as much as x
-                 # since lanes spread horizontally but ramps sit further up vertically
+_ASPECT = 1.78  # typical LTA frame aspect — y spread counts ~1.78x as much as x
+# since lanes spread horizontally but ramps sit further up vertically
 
 
 def assign_detection_direction(
