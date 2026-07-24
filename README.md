@@ -254,6 +254,79 @@ notebooks/                      # Full pipeline in execution order
 
 ---
 
+## Current Limitation & Phase 3: Singapore Vehicle Taxonomy
+
+### The Oversight
+
+The current model uses **COCO-pretrained weights with 6 generic classes** (`car, motorcycle, bus, truck, van, lorry`). This produces systematic miscounts because COCO's taxonomy was not designed for Singapore's expressway vehicle mix:
+
+| What's on the road | What COCO calls it | Error |
+|---|---|---|
+| Container truck (articulated) | `truck` | Road load severely underestimated — 2× footprint ignored |
+| Prime mover (no container) | `truck` or `car` | Often missed or misclassified |
+| Tipper / construction truck | `truck` | Conflated with container trucks |
+| Scooter / moped | `motorcycle` | Different behaviour, different lane discipline |
+| Taxi | `car` | High stop-start behaviour invisible to analytics |
+| School / shuttle bus | `truck` | Misclassified |
+
+Near MCE, AYE, and Tuas — roads that carry heavy port freight — the container truck misclassification alone means congestion scores are materially wrong.
+
+### Phase 3: Singapore-Specific Vehicle Taxonomy
+
+**10-class taxonomy designed for LTA expressway camera angles:**
+
+```
+0  car              sedan, hatchback, SUV, MPV
+1  motorcycle       standard motorcycle
+2  scooter          moped, small scooter
+3  bus              double-decker and single-decker
+4  van              panel van, minivan, delivery van
+5  lorry            light lorry, pickup truck
+6  container_truck  articulated lorry with shipping container
+7  prime_mover      tractor unit only (no container)
+8  tipper_truck     tipper, dump truck, concrete mixer
+9  taxi             Singapore taxi (distinct livery)
+```
+
+### Labelling Pipeline: Grounding DINO + Human Review
+
+Rather than manual annotation from scratch, the pipeline uses **Grounding DINO** ([Liu et al., 2023](https://arxiv.org/abs/2303.05499)) — a zero-shot open-set detector — to auto-label the raw images collected from 90 LTA cameras, followed by targeted human review of low-confidence predictions.
+
+```
+Google Drive (raw LTA images)
+         │
+         ▼
+  Sample ~200 images per camera condition
+  (clear day / rain / night / haze)
+         │
+         ▼
+  Grounding DINO inference
+  Text query: "car . motorcycle . scooter . bus . van .
+               lorry . container truck . prime mover .
+               tipper truck . taxi ."
+         │
+         ├──► High-confidence detections → YOLO labels (auto-accept)
+         └──► Low-confidence / ambiguous → review queue (human label)
+                        │
+                        ▼
+              Label Studio / CVAT human review
+                        │
+                        ▼
+              Clean YOLO-format dataset
+              (train/val split, stratified by condition)
+                        │
+                        ▼
+              Fine-tune YOLOv11s on Singapore data
+              (backbone init from COCO, new head for 10 classes)
+                        │
+                        ▼
+              CATI Phase 1 + 2 training on Singapore-labelled data
+```
+
+Notebook `10_label_sg_vehicles.ipynb` (Colab) runs the full Grounding DINO pass on Drive images and outputs YOLO labels + annotated review JPEGs.
+
+---
+
 ## Development
 
 ```bash

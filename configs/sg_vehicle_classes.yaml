@@ -1,0 +1,30 @@
+# Singapore-Specific Vehicle Taxonomy
+# 10 classes designed for LTA expressway camera angles and Singapore's vehicle mix.
+# Replaces the 6-class COCO-inherited taxonomy (car/motorcycle/bus/truck/van/lorry).
+
+nc: 10
+
+names:
+  0: car             # sedan, hatchback, SUV, MPV
+  1: motorcycle      # standard motorcycle
+  2: scooter         # moped, small scooter
+  3: bus             # double-decker and single-decker
+  4: van             # panel van, minivan, delivery van
+  5: lorry           # light lorry, pickup truck
+  6: container_truck # articulated lorry with shipping container
+  7: prime_mover     # tractor unit only (no container attached)
+  8: tipper_truck    # tipper, dump truck, concrete mixer
+  9: taxi            # Singapore taxi (distinct livery — blue, yellow, red)
+
+# Labelling notes:
+#   container_truck vs prime_mover: look for the container box behind the cab
+#   motorcycle vs scooter: scooters have step-through frame, smaller wheel diameter
+#   taxi: Singapore taxis have distinctive single-colour livery + rooftop sign
+#   tipper_truck: visible raised/angled bed distinguishes from container_truck
+
+# Grounding DINO text query (used in notebooks/10_label_sg_vehicles.ipynb):
+gdino_query: >
+  car . motorcycle . scooter . moped . bus . double decker bus .
+  van . delivery van . lorry . light truck . pickup truck .
+  container truck . articulated lorry . prime mover . tractor unit .
+  tipper truck . dump truck . construction truck . taxi . cab .
