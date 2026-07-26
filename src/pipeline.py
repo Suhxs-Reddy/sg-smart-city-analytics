@@ -153,44 +153,60 @@ class TrackingStage(PipelineStage):
     def run(
         self,
         input_dir: str | None = None,
-        model_path: str = "models/yolo11s_traffic.pt",
+        model_path: str = "models/cati_latest.pt",
         max_frames: int | None = None,
     ) -> dict:
-        from src.tracking.tracker import VehicleTracker, estimate_congestion_score
+        from src.tracking.tracker import Detection as TrackDet, SingaporeTracker
 
-        raw_dir = Path(input_dir or self.dirs["raw"])
+        # Reads from DetectionStage JSONL outputs — run detect stage first
+        det_dir = Path(self.dirs["detections"])
         output_dir = Path(self.dirs["tracking"])
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        self._log_start(input=str(raw_dir), model=model_path)
-
-        tracker = VehicleTracker(detector_model=model_path)
-
-        camera_dirs = sorted(
-            [d for d in raw_dir.rglob("*") if d.is_dir() and list(d.glob("*.jpg"))]
-        )
+        self._log_start(input=str(det_dir))
 
         all_congestion = {}
         total_vehicles = 0
 
-        for cam_dir in camera_dirs:
-            camera_id = cam_dir.name
-            result = tracker.track_image_sequence(
-                str(cam_dir),
-                camera_id=camera_id,
-                output_path=str(output_dir / f"{camera_id}.json"),
-                max_frames=max_frames,
-            )
-            congestion = estimate_congestion_score(result)
-            all_congestion[camera_id] = congestion
-            total_vehicles += result.total_unique_vehicles
+        for jsonl_file in sorted(det_dir.glob("*.jsonl")):
+            camera_id = jsonl_file.stem
+            tracker = SingaporeTracker(camera_id=camera_id)
+            unique_ids: set[int] = set()
+            frame_id = 0
 
-        # Save congestion scores
+            with open(jsonl_file) as f:
+                for line in f:
+                    if max_frames and frame_id >= max_frames:
+                        break
+                    try:
+                        frame_data = json.loads(line)
+                        dets = [
+                            TrackDet(
+                                bbox=d["bbox"],
+                                confidence=d["confidence"],
+                                class_id=d.get("class_id", 0),
+                            )
+                            for d in frame_data.get("detections", [])
+                        ]
+                        tracks = tracker.update(dets, frame_id)
+                        unique_ids.update(
+                            t.track_id for t in tracks if t.is_confirmed()
+                        )
+                        frame_id += 1
+                    except (json.JSONDecodeError, KeyError):
+                        continue
+
+            # Congestion: unique vehicles per camera normalised by road capacity
+            congestion = round(min(len(unique_ids) / 50.0, 1.0), 3)
+            all_congestion[camera_id] = congestion
+            total_vehicles += len(unique_ids)
+
         with open(output_dir / "congestion_scores.json", "w") as f:
             json.dump(all_congestion, f, indent=2)
 
+        jsonl_files = list(det_dir.glob("*.jsonl"))
         summary = {
-            "cameras_tracked": len(camera_dirs),
+            "cameras_tracked": len(jsonl_files),
             "total_unique_vehicles": total_vehicles,
         }
         self._log_end(summary)
