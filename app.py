@@ -87,8 +87,8 @@ except Exception:
     # Fallback if src not available (local dev without Docker)
     _MCE_IDS = {"6702", "6703", "6704", "6705"}
     _PREFIX_ROAD = {
-        "1": "CTE",
-        "2": "CTE",
+        "1": "KPE",
+        "2": "SLE",
         "3": "ECP",
         "4": "PIE",
         "5": "AYE",

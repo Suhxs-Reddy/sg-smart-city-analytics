@@ -10,7 +10,7 @@ model:
   num_cameras: 90                   # Singapore LTA camera network
   context_dim: 64                   # Context embedding dimension
   camera_embed_dim: 16              # Per-camera learned embedding
-  backbone_channels: [128, 256, 512]  # YOLOv11s P3/P4/P5 channels
+  backbone_channels: [256, 256, 512]  # YOLOv11s P3/P4/P5 channels
   num_classes: 6                    # car, motorcycle, bus, truck, person, bicycle
   img_size: 640
 
