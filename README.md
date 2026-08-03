@@ -3,7 +3,7 @@
 **Context-Aware Traffic Intelligence: a FiLM-conditioned YOLOv11 detector that adapts to environment at inference time, deployed live against all 90 Singapore LTA expressway cameras.**
 
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-HF%20Space-yellow)](https://huggingface.co/spaces/SuhxsReddy/SingaporeAnalytics)
-[![Dataset](https://img.shields.io/badge/Dataset-190k%2B%20records-blue)](https://huggingface.co/datasets/SuhxsReddy/cati-singapore-dataset)
+[![Dataset](https://img.shields.io/badge/Dataset-213k%2B%20records-blue)](https://huggingface.co/datasets/SuhxsReddy/cati-singapore-dataset)
 [![Model](https://img.shields.io/badge/Model-HF%20Hub-orange)](https://huggingface.co/SuhxsReddy/cati-singapore)
 [![CI](https://img.shields.io/github/actions/workflow/status/Suhxs-Reddy/sg-smart-city-analytics/ci.yml?label=CI)](https://github.com/Suhxs-Reddy/sg-smart-city-analytics/actions)
 [![Python](https://img.shields.io/badge/python-3.11+-blue)](https://www.python.org/)
@@ -20,7 +20,9 @@ A Streamlit dashboard deployed on Hugging Face Spaces runs continuous inference 
 3. Per-camera directional counts are computed (vehicles heading each way per road)
 4. Results are appended to a public HF dataset and rendered on a live Folium map
 
-**190,910 detection records collected across 70+ days (April – June 2026).** Schema: 25 columns including per-class vehicle counts (car, motorcycle, bus, truck, van, lorry), directional split, weather condition, road assignment, and model versioning metadata.
+**213k+ detection records collected since April 2026, still growing.** The Space runs continuous inference — every 90 seconds it sweeps all 90 cameras and appends one row per camera to the public dataset. Schema: 25 columns including per-class vehicle counts, directional split, weather condition, road assignment, and model version.
+
+**Phase 3 retraining is in progress.** The current deployed model (Phase 2) was trained on COCO pseudo-labels — vehicle classes are approximate. Phase 3 replaces these with Grounding DINO auto-labels under a 10-class Singapore-specific taxonomy (car, motorcycle, scooter, bus, van, lorry, container truck, prime mover, tipper truck, taxi). New weights will be pushed to the Space once training completes.
 
 ---
 
@@ -137,8 +139,8 @@ Input: [weather_id, temperature, hour_sin, hour_cos, cam_embedding(16), resoluti
 
 | Field | Detail |
 |-------|--------|
-| Records | 190,910 (v2) + 22,018 (v1) = **~213,000 total** |
-| Date range | April 15 – June 27, 2026 |
+| Records | **213,000+** (growing — live collection every 90s) |
+| Date range | April 15, 2026 – present |
 | Cameras | All 90 LTA expressway cameras |
 | Collection interval | 90 seconds per full sweep |
 | Schema version | v2: ground-truth direction anchors, N-direction visibility |
