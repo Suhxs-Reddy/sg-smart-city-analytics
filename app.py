@@ -342,6 +342,7 @@ def _run_inference_loop(state: dict, model):
     ]
 
     # On startup: pull existing v2 dataset from HF Hub (old cati_detections.csv preserved separately)
+    hf_row_count = 0  # rows successfully pulled from HF; guards against overwrite on failed pull
     if not DATASET_PATH.exists():
         try:
             from huggingface_hub import hf_hub_download
@@ -356,6 +357,8 @@ def _run_inference_loop(state: dict, model):
             import shutil
 
             shutil.copy(existing, DATASET_PATH)
+            with open(DATASET_PATH) as _f:
+                hf_row_count = sum(1 for _ in _f) - 1  # exclude header
         except Exception:
             pass
 
@@ -366,8 +369,10 @@ def _run_inference_loop(state: dict, model):
                 existing_header = f.readline().strip().split(",")
             if existing_header != CURRENT_SCHEMA:
                 DATASET_PATH.unlink()  # delete stale schema, start fresh
+                hf_row_count = 0
         except Exception:
             DATASET_PATH.unlink()
+            hf_row_count = 0
 
     write_header = not DATASET_PATH.exists()
     dataset_file = open(DATASET_PATH, "a", newline="")  # noqa: SIM115 — kept open across while-loop iterations
@@ -600,30 +605,36 @@ def _run_inference_loop(state: dict, model):
                 pass
             is_first_sweep = False
 
-        # Push dataset to HF Hub after every sweep so restarts don't lose data
+        # Push dataset to HF Hub after every sweep so restarts don't lose data.
+        # Guard: only upload if local row count >= rows pulled from HF on startup.
+        # Prevents a failed startup pull from overwriting the full dataset with a single sweep.
         try:
             from huggingface_hub import HfApi
 
             hf_token = os.environ.get("HF_TOKEN")
             if hf_token and DATASET_PATH.exists():
-                api = HfApi()
-                api.create_repo(
-                    "SuhxsReddy/cati-singapore-dataset",
-                    token=hf_token,
-                    repo_type="dataset",
-                    exist_ok=True,
-                    private=False,
-                )
-                with open(DATASET_PATH, "rb") as f:
-                    api.upload_file(
-                        path_or_fileobj=f,
-                        path_in_repo=DATASET_HUB_FILENAME,
-                        repo_id="SuhxsReddy/cati-singapore-dataset",
-                        repo_type="dataset",
+                local_rows = sum(1 for _ in open(DATASET_PATH)) - 1
+                if local_rows >= hf_row_count:
+                    api = HfApi()
+                    api.create_repo(
+                        "SuhxsReddy/cati-singapore-dataset",
                         token=hf_token,
+                        repo_type="dataset",
+                        exist_ok=True,
+                        private=False,
                     )
-                state["last_push"] = time.strftime("%H:%M:%S")
-                state["push_error"] = None
+                    with open(DATASET_PATH, "rb") as f:
+                        api.upload_file(
+                            path_or_fileobj=f,
+                            path_in_repo=DATASET_HUB_FILENAME,
+                            repo_id="SuhxsReddy/cati-singapore-dataset",
+                            repo_type="dataset",
+                            token=hf_token,
+                        )
+                    state["last_push"] = time.strftime("%H:%M:%S")
+                    state["push_error"] = None
+                else:
+                    state["push_error"] = f"upload blocked: local={local_rows} < hf={hf_row_count}"
         except Exception as e:
             state["push_error"] = str(e)  # visible in header, never stops inference
 
