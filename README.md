@@ -20,9 +20,9 @@ A Streamlit dashboard deployed on Hugging Face Spaces runs continuous inference 
 3. Per-camera directional counts are computed (vehicles heading each way per road)
 4. Results are appended to a public HF dataset and rendered on a live Folium map
 
-**213k+ detection records collected since April 2026, still growing.** The Space runs continuous inference — every 90 seconds it sweeps all 90 cameras and appends one row per camera to the public dataset. Schema: 25 columns including per-class vehicle counts, directional split, weather condition, road assignment, and model version.
+**213k+ detection records collected since April 2026**, preserved on HF through pipeline downtime. The Space runs continuous inference — every 90 seconds it sweeps all 90 cameras and appends one row per camera to the public dataset. Schema: 25 columns including per-class vehicle counts, directional split, weather condition, road assignment, and model version. EC2-based continuous collection coming once Phase 3 is done.
 
-**Phase 3 retraining is in progress.** The current deployed model (Phase 2) was trained on COCO pseudo-labels — vehicle classes are approximate. Phase 3 replaces these with Grounding DINO auto-labels under a 10-class Singapore-specific taxonomy (car, motorcycle, scooter, bus, van, lorry, container truck, prime mover, tipper truck, taxi). New weights will be pushed to the Space once training completes.
+**Phase 3 retraining in progress.** The current deployed model (Phase 2) was trained on COCO pseudo-labels — vehicle classes are approximate. Phase 3 replaces these with Grounding DINO auto-labels under a 10-class Singapore-specific taxonomy (car, motorcycle, scooter, bus, van, lorry, container truck, prime mover, tipper truck, taxi). GDino auto-labelling is complete (~1,800 images across all 90 cameras). Dataset build and training next — new weights pushed to the Space once done.
 
 ---
 
@@ -325,7 +325,7 @@ Google Drive (raw LTA images)
               CATI Phase 1 + 2 training on Singapore-labelled data
 ```
 
-Notebook `10_label_sg_vehicles.ipynb` (Colab) runs the full Grounding DINO pass on Drive images and outputs YOLO labels + annotated review JPEGs.
+Notebook `10_label_sg_vehicles.ipynb` (Colab) runs the full Grounding DINO pass on Drive images and outputs YOLO labels + annotated review JPEGs. **Complete** — ~1,800 images labelled across all 90 cameras.
 
 ---
 
