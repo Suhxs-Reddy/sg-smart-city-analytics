@@ -20,7 +20,7 @@ A Streamlit dashboard deployed on Hugging Face Spaces runs continuous inference 
 3. Per-camera directional counts are computed (vehicles heading each way per road)
 4. Results are appended to a public HF dataset and rendered on a live Folium map
 
-**213k+ detection records collected since April 2026**, preserved on HF through pipeline downtime. The Space runs continuous inference — every 90 seconds it sweeps all 90 cameras and appends one row per camera to the public dataset. Schema: 25 columns including per-class vehicle counts, directional split, weather condition, road assignment, and model version. EC2-based continuous collection coming once Phase 3 is done.
+**213k+ detection records from a 15-day initial run in April 2026**, preserved on HF through pipeline downtime. The Space runs continuous inference — every 90 seconds it sweeps all 90 cameras and appends one row per camera to the public dataset. Schema: 25 columns including per-class vehicle counts, directional split, weather condition, road assignment, and model version. EC2-based continuous collection coming once Phase 3 is done.
 
 **Phase 3 retraining in progress.** The current deployed model (Phase 2) was trained on COCO pseudo-labels — vehicle classes are approximate. Phase 3 replaces these with Grounding DINO auto-labels under a 10-class Singapore-specific taxonomy (car, motorcycle, scooter, bus, van, lorry, container truck, prime mover, tipper truck, taxi). GDino auto-labelling is complete (~1,800 images across all 90 cameras). Dataset build and training next — new weights pushed to the Space once done.
 
@@ -110,7 +110,7 @@ YOLOv11s has **9.4M parameters**. CATI adds **~130K** — **1.4% overhead**, wit
 | SE-Attention × 3 | ~12K | Channel recalibration before each FiLM application |
 | **Total CATI overhead** | **~130K** | |
 
-**Initialisation**: γ = 1, β = 0, α = 0 at all FiLM sites. This means CATI starts as an exact copy of vanilla YOLOv11s and only deviates from it as training reveals that context is useful. There is no risk of the conditioning destabilising early training.
+**Initialisation**: γ = 1, β = 0, gate bias = −2 (α ≈ 0.12, near-off) at all FiLM sites. CATI starts near-identical to vanilla YOLOv11s — the gate is biased strongly toward the identity path and only opens where training demonstrates that context reduces detection loss. There is no risk of the conditioning destabilising early training.
 
 ### Context Encoder Design
 
@@ -140,7 +140,7 @@ Input: [weather_id, temperature, hour_sin, hour_cos, cam_embedding(16), resoluti
 | Field | Detail |
 |-------|--------|
 | Records | **213,000+** (growing — live collection every 90s) |
-| Date range | April 15, 2026 – present |
+| Date range | April 2026 (15-day initial run) |
 | Cameras | All 90 LTA expressway cameras |
 | Collection interval | 90 seconds per full sweep |
 | Schema version | v2: ground-truth direction anchors, N-direction visibility |
