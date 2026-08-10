@@ -3,9 +3,14 @@ CATI REST API — Singapore Smart City Live Traffic Analytics
 
 FastAPI backend that:
   - Loads CATIPipeline once at startup (GPU-bound, ~45s on T4)
-  - Fetches live LTA camera frames every 20 seconds in a background thread
-  - Runs CATI inference across 9 selected expressway cameras
+  - Fetches live LTA camera frames in a background thread
+  - Runs CATI inference across the 8 active LTA checkpoint cameras
   - Exposes clean REST endpoints consumed by the Streamlit frontend (app.py)
+
+Camera network (post June 30 2026 LTA decommission):
+  Woodlands Checkpoint  — cams 2701, 2702, 2704
+  Tuas Second Link      — cams 4703, 4712, 4713
+  Sentosa Gateway       — cams 4798, 4799
 
 Architecture:
   One CATIPipeline instance (module-level singleton).
@@ -49,19 +54,22 @@ logger = logging.getLogger("cati.server")
 
 SGT = timezone(timedelta(hours=8))
 
+# Active cameras since LTA decommissioned 82 of 90 cameras on 30 June 2026.
+# All 8 are 1920×1080. Actual pixel refresh rate ~4 min (CDN cache-busting
+# makes URLs rotate every 20s, but content only changes every ~4 min).
 SELECTED_CAMERAS = [
-    "1001",
-    "1701",
-    "4701",
-    "4710",
-    "5794",
-    "6701",
-    "7791",
-    "8701",
-    "9701",
+    "2701", "2702", "2704",   # Woodlands Checkpoint
+    "4703", "4712", "4713",   # Tuas Second Link
+    "4798", "4799",           # Sentosa Gateway
 ]
 
-REFRESH_INTERVAL_S = 20.0  # LTA images update every ~20s
+CHECKPOINT_LABEL = {
+    "2701": "Woodlands", "2702": "Woodlands", "2704": "Woodlands",
+    "4703": "Tuas",      "4712": "Tuas",      "4713": "Tuas",
+    "4798": "Sentosa",   "4799": "Sentosa",
+}
+
+REFRESH_INTERVAL_S = 90.0  # match camera hardware refresh rate
 
 
 # ---------------------------------------------------------------------------

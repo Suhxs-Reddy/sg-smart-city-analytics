@@ -8,14 +8,16 @@ app_port: 7860
 hardware: cpu-basic
 pinned: true
 license: mit
-short_description: Real-time Singapore expressway live traffic cameras + AI analytics
+short_description: Real-time Singapore checkpoint cameras (Woodlands, Tuas, Sentosa) + AI analytics
 ---
 
 # Singapore Smart City Traffic Analytics
 
 **CATI — Context-Aware Traffic Intelligence**
 
-A novel traffic detection and analytics platform built on Singapore's 90 LTA traffic cameras. The core contribution is **CATI**, a FiLM-conditioned YOLOv11 detector that adapts to environmental conditions (weather, time-of-day, camera viewpoint) using real-time metadata from Singapore's national APIs.
+A novel traffic detection and analytics platform built on Singapore's LTA checkpoint cameras. The core contribution is **CATI**, a FiLM-conditioned YOLOv11 detector that adapts to environmental conditions (weather, time-of-day, camera viewpoint) using real-time metadata from Singapore's national APIs.
+
+> **Camera network**: LTA decommissioned 82 of 90 public cameras on 30 June 2026. The 8 remaining cameras cover Singapore's three highest-traffic border checkpoints — Woodlands (cams 2701, 2702, 2704), Tuas Second Link (4703, 4712, 4713), and Sentosa Gateway (4798, 4799) — handling over 500,000 border crossings per day at 1920×1080 resolution.
 
 ![Python](https://img.shields.io/badge/python-3.11+-blue)
 ![PyTorch](https://img.shields.io/badge/pytorch-2.1+-red)
