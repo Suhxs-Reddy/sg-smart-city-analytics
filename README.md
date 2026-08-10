@@ -80,7 +80,7 @@ CONTEXT BRANCH                    VISION BRANCH
 
 ### Key Design Decisions
 
-- **FiLM init = identity**: γ=1, β=0 at initialization, so the model starts equivalent to vanilla YOLO
+- **FiLM init = near-identical**: γ=1, β=0, gate bias=−2 (α≈0.12, near-off) — the model starts near-identical to vanilla YOLO; the gate only opens where training proves context helps
 - **Per-camera embeddings**: Each of the 8 active checkpoint cameras has a learned 16-dim embedding capturing viewpoint priors
 - **Cyclical time encoding**: sin/cos encoding avoids midnight discontinuity
 - **~130K overhead**: CATI adds ~130K parameters to YOLO's 9.4M — 1.4% overhead, negligible inference cost
