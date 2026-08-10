@@ -26,6 +26,12 @@ A novel traffic detection and analytics platform built on Singapore's LTA checkp
 
 ---
 
+> **Two branches, two purposes.**
+> You're on `main` — the live HF Space deployment (`app.py`, `Dockerfile`, `server.py`). Model weights are pulled from [HF Hub](https://huggingface.co/SuhxsReddy/cati-singapore) at startup; no training code lives here.
+> For the full research codebase — CATI architecture, training pipeline, data collection scripts, GDino labelling, all notebooks — switch to **[`fresh`](https://github.com/Suhxs-Reddy/sg-smart-city-analytics/tree/fresh)**.
+
+---
+
 ## The Problem
 
 Generic object detectors (YOLO, Faster R-CNN) treat every frame identically — a clear daytime highway image and a rain-soaked night image from a 320x240 camera receive the exact same feature extraction. But in Singapore's fixed-camera traffic network, we **know things at inference time** that generic detectors ignore:
