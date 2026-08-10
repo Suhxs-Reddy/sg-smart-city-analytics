@@ -335,6 +335,32 @@ Notebook `10_label_sg_vehicles.ipynb` (Colab) runs the full Grounding DINO pass 
 
 ---
 
+## Phase 4: Night-Aware Detection (Planned)
+
+### The FiLM Limitation at Night
+
+FiLM modulates existing feature map activations — it scales and shifts what the backbone already computed. This works well when degraded conditions (rain, haze, glare) suppress signal that is still structurally present. At night it hits a harder wall: the COCO-pretrained backbone's convolutional filters learned to respond to edges, textures, and colour gradients. In total darkness those signals collapse. FiLM applied to near-zero activations cannot recover information that was never extracted.
+
+The relevant visual cues at night are structurally different: headlight pair spacing identifies vehicle width, headlight height identifies truck vs car, tail light density indicates queue depth. These are point-light-source features, not texture features.
+
+### Planned Architecture
+
+**1. Dark baseline hard negatives**
+
+Run the collector 3–5am SGT when Woodlands and Tuas are at minimum traffic. These frames have the full streetlight configuration visible with few or no vehicles. Training on these as empty-label negatives teaches the model that lit scene geometry alone — streetlights, road markings, ambient glow — does not indicate a vehicle. Without this, a night-trained model risks firing on streetlight patterns.
+
+**2. Context-conditioned bright-region attention**
+
+Insert a lightweight attention module before the backbone that activates when the context encoder detects dark conditions (hour encoding + mean pixel intensity). In dark frames, this generates a saliency mask over high-intensity point sources (headlight pairs, tail lights) and upweights those regions in the early backbone feature maps before FiLM applies. During daylight the module gates off entirely. This is distinct from Retinex-style illumination normalisation — Retinex would suppress streetlights along with ambient light, destroying the very point-light signals that carry vehicle information at night.
+
+**3. Frequency-domain reweighting**
+
+At night, low-frequency components (large bright blobs) dominate; high-frequency texture features collapse. A frequency reweighting layer conditioned on the context encoder upweights low-frequency channels in dark frames, directing the backbone's attention toward headlight blob features rather than absent texture edges.
+
+**Expected outcome**: the +0.031 mAP gap on clean val and +7.5% detection gap in pre-dawn conditions are both measured with FiLM gates that barely opened after 25 epochs on 1,133 images. Phase 4 trains on a substantially larger adversarial dataset with hard negatives, more epochs, and explicit night-aware architecture — the condition-stratified mAP gap (CATI vs ablation on night-only val) is expected to be significantly larger than the aggregate +0.031.
+
+---
+
 ## Development
 
 ```bash
