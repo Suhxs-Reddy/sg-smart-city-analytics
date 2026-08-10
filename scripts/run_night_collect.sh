@@ -6,6 +6,9 @@
 # Cron schedule (IST):
 #   0 16 * * *  →  18:30 SGT evening job  →  stop_hour=24.5
 #   0 22 * * *  →  00:30 SGT dawn job     →  stop_hour=30.5
+#
+# No Drive auth needed — images are saved to Colab /content/ then pushed to HF.
+# Requires ~/.cache/huggingface/token to exist (run `huggingface-cli login` once).
 
 STOP_HOUR=${1:-31.5}
 COLAB="/opt/anaconda3/bin/colab"
@@ -24,29 +27,29 @@ echo "Stop hour : $STOP_HOUR SGT"
 echo "Started   : $(date)"
 echo ""
 
-# Create CPU session (no GPU needed for collection)
+# Create CPU session
 $COLAB new --session "$SESSION"
 if [ $? -ne 0 ]; then
     echo "ERROR: Failed to create Colab session"
     exit 1
 fi
 
-# Mount Google Drive on the VM
-$COLAB drivemount -s "$SESSION"
+# Upload HF token as a file to avoid shell escaping issues with the token string
+HF_TOK_FILE=$(mktemp /tmp/hf_tok.XXXXXX)
+cat ~/.cache/huggingface/token > "$HF_TOK_FILE"
+$COLAB upload -s "$SESSION" "$HF_TOK_FILE" /content/.hf_token
+rm "$HF_TOK_FILE"
 
-# Upload the collection script
-$COLAB upload -s "$SESSION" "$SCRIPT_LOCAL"
+# Set env vars in the kernel — persists for the session lifetime
+printf "import os\nos.environ['CATI_STOP_HOUR'] = '%s'\nos.environ['HF_TOKEN'] = open('/content/.hf_token').read().strip()\nos.environ['HF_RAW_REPO'] = 'SuhxsReddy/cati-night-raw'\n" "$STOP_HOUR" | \
+    $COLAB exec -s "$SESSION"
 
-# Set stop hour in the VM kernel's environment
-$COLAB exec -s "$SESSION" "import os; os.environ['CATI_STOP_HOUR']='$STOP_HOUR'"
-
-# Run collection — caffeinate keeps Mac awake, timeout matches 6h window
+# Run collection — caffeinate keeps Mac awake, timeout matches full window + upload buffer
 caffeinate -i $COLAB exec -s "$SESSION" \
     --file "$SCRIPT_LOCAL" \
-    --timeout 21300
+    --timeout 23400
 
 echo ""
 echo "Finished  : $(date)"
 
-# Clean up session
 $COLAB stop -s "$SESSION" || true

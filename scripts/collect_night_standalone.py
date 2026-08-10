@@ -1,22 +1,23 @@
 """
-CATI Night Baseline Collector — standalone (no Jupyter, runs via colab run)
+CATI Night Baseline Collector — standalone (no Jupyter, runs via colab exec --file)
 
 Usage:
-    colab run --timeout 21600 scripts/collect_night_standalone.py [STOP_HOUR]
+    colab exec -s <session> --file scripts/collect_night_standalone.py --timeout 21300
 
-STOP_HOUR: decimal SGT hour to self-terminate (AM hours are +24).
-    Default 31.25 = 07:15 SGT.
-    Evening job passes 24.5 (= 00:30 SGT).
-    Dawn job uses default.
+Env vars (set in kernel before running):
+    CATI_STOP_HOUR  decimal SGT hour to self-terminate (AM hours = +24)
+                    24.5 = 00:30 SGT (evening job), 30.5 = 06:30 SGT (dawn job)
+    HF_TOKEN        Hugging Face write token — images pushed here instead of Drive
+    HF_RAW_REPO     HF dataset repo id (default: SuhxsReddy/cati-night-raw)
 
-Drive must be pre-mounted at /content/drive by the caller (colab drivemount).
+No Drive mount required.
 """
 
 import subprocess, sys
 
 subprocess.run([sys.executable, '-m', 'pip', 'install', '-q',
                 'aiohttp', 'Pillow', 'numpy', 'opencv-python-headless',
-                'pandas', 'nest_asyncio'],
+                'pandas', 'nest_asyncio', 'huggingface_hub'],
                check=True)
 
 import asyncio, csv, hashlib, io, json
@@ -53,7 +54,9 @@ WEATHER_URL = 'https://api.data.gov.sg/v1/environment/24-hour-weather-forecast'
 PM25_URL    = 'https://api.data.gov.sg/v1/environment/pm25'
 TEMP_URL    = 'https://api.data.gov.sg/v1/environment/air-temperature'
 
-DRIVE_DATA = Path('/content/drive/MyDrive/sg_smart_city/data')
+LOCAL_DATA   = Path('/content/cati_night_data')
+HF_TOKEN     = os.environ.get('HF_TOKEN', '')
+HF_RAW_REPO  = os.environ.get('HF_RAW_REPO', 'SuhxsReddy/cati-night-raw')
 
 BLOB_THRESH    = 200
 BLOB_AREA_MIN  = 50
@@ -163,7 +166,7 @@ async def main():
     now = datetime.datetime.now(SGT)
     nd  = night_date_for(now)
 
-    night_dir  = DRIVE_DATA / 'raw_night_baseline' / f'night_{nd}'
+    night_dir  = LOCAL_DATA / f'night_{nd}'
     night_dir.mkdir(parents=True, exist_ok=True)
     manifest_p = night_dir / f'night_{nd}_manifest.csv'
 
@@ -292,6 +295,21 @@ async def main():
                 await asyncio.sleep(max(0, INTERVAL - elapsed))
 
     print(f'\nDone. {total_saved} frames  →  {night_dir}')
+
+    if HF_TOKEN and total_saved > 0:
+        print(f'[HF] Uploading {night_dir} to {HF_RAW_REPO} ...')
+        from huggingface_hub import HfApi
+        api = HfApi(token=HF_TOKEN)
+        api.create_repo(HF_RAW_REPO, repo_type='dataset', private=True, exist_ok=True)
+        api.upload_folder(
+            folder_path=str(LOCAL_DATA),
+            repo_id=HF_RAW_REPO,
+            repo_type='dataset',
+            commit_message=f'night collection {nd} ({total_saved} frames)',
+        )
+        print(f'[HF] Done → https://huggingface.co/datasets/{HF_RAW_REPO}')
+    elif not HF_TOKEN:
+        print('[HF] No HF_TOKEN set — skipping upload. Images are in /content/cati_night_data/')
 
 
 if __name__ == '__main__':
