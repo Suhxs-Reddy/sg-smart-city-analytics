@@ -1,0 +1,92 @@
+name: CATI Nightly Collection
+
+# Covers the full Singapore night window in two 6-hour jobs:
+#   Evening job  → 18:30 SGT (10:30 UTC) → runs to 00:30 SGT, stop_hour=24.5
+#   Dawn job     → 00:30 SGT (16:30 UTC) → runs to 06:30 SGT, stop_hour=30.5
+#
+# Both jobs save to the same night_YYYY-MM-DD folder in Google Drive.
+# The standalone script appends to an existing manifest if restarted mid-night.
+#
+# One-time setup:
+#   1. Run locally: cat ~/.config/colab-cli/token.json
+#   2. Add the full JSON as GitHub Secret named COLAB_TOKEN (Settings → Secrets)
+
+on:
+  schedule:
+    - cron: '30 10 * * *'   # 18:30 SGT — evening job
+    - cron: '30 16 * * *'   # 00:30 SGT — dawn job
+  workflow_dispatch:
+    inputs:
+      stop_hour:
+        description: 'Override stop hour (decimal SGT, AM+24). Default: 31.5'
+        required: false
+        default: '31.5'
+
+jobs:
+  collect:
+    name: Collect (${{ github.event.schedule || 'manual' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 360    # 6 hours — GitHub-hosted runner max
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Colab CLI
+        run: pip install google-colab-cli
+
+      - name: Restore Colab auth token
+        run: |
+          mkdir -p ~/.config/colab-cli
+          echo '${{ secrets.COLAB_TOKEN }}' > ~/.config/colab-cli/token.json
+
+      - name: Determine collection window
+        id: window
+        run: |
+          if [ -n "${{ github.event.inputs.stop_hour }}" ]; then
+            STOP_HOUR="${{ github.event.inputs.stop_hour }}"
+          else
+            HOUR_UTC=$(date -u +%H)
+            # Evening job triggers at ~10:30 UTC, dawn job at ~16:30 UTC
+            if [ "$HOUR_UTC" -lt 14 ]; then
+              STOP_HOUR="24.5"   # 00:30 SGT — hand off to dawn job
+            else
+              STOP_HOUR="30.5"   # 06:30 SGT — end of collection window
+            fi
+          fi
+          echo "stop_hour=$STOP_HOUR" >> $GITHUB_OUTPUT
+          echo "Session window: stop at SGT hour $STOP_HOUR"
+
+      - name: Create Colab session
+        id: session
+        run: |
+          SESSION="night-$(date -u +%H%M)"
+          colab new --session "$SESSION"
+          echo "name=$SESSION" >> $GITHUB_OUTPUT
+          echo "Created session: $SESSION"
+
+      - name: Mount Google Drive
+        run: colab drivemount -s ${{ steps.session.outputs.name }}
+
+      - name: Upload collection script
+        run: colab upload -s ${{ steps.session.outputs.name }} scripts/collect_night_standalone.py
+
+      - name: Set stop hour in VM environment
+        run: |
+          colab exec -s ${{ steps.session.outputs.name }} \
+            "import os; os.environ['CATI_STOP_HOUR']='${{ steps.window.outputs.stop_hour }}'"
+
+      - name: Run collection (blocks until stop hour or 6h timeout)
+        run: |
+          colab exec -s ${{ steps.session.outputs.name }} \
+            --file /content/collect_night_standalone.py \
+            --timeout 21300
+
+      - name: Stop session
+        if: always()
+        run: colab stop -s ${{ steps.session.outputs.name }} || true
