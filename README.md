@@ -29,7 +29,7 @@ A Streamlit dashboard deployed on Hugging Face Spaces runs continuous inference 
 
 From 30 June 2026, LTA decommissioned the 320×240 expressway camera feed and retained only 8 high-resolution cameras at Singapore's two land border crossings (Woodlands Checkpoint and Tuas Second Link) and Sentosa Gateway. These are three of the highest-traffic chokepoints in Singapore — Woodlands and Tuas handle over 500,000 daily crossings between Singapore and Malaysia. The live feed now delivers deep checkpoint analytics: cross-border vehicle flow, heavy goods vehicle classification at Tuas, and tourist traffic patterns at Sentosa.
 
-**Phase 3 in progress.** Initial retraining on a 10-class Singapore-specific taxonomy (car, motorcycle, scooter, bus, van, lorry, container truck, prime mover, tipper truck, taxi) complete — CATI mAP50=0.572 vs ablation 0.541, +7.5% detection in pre-dawn conditions. Now collecting adversarial data at the 8 checkpoint cameras (night/sunrise/rain) for targeted fine-tuning on border traffic. New weights pushed to HF and app.py updated to 10-class schema once fine-tuning is done.
+**Phase 3 in progress.** Initial retraining on a 10-class Singapore-specific taxonomy (car, motorcycle, scooter, bus, van, lorry, container truck, prime mover, tipper truck, taxi) complete — CATI mAP50=0.572 vs ablation 0.541; in pre-dawn frames (05:00–06:00) CATI produced ~7.5% more detections than the ablation at higher average confidence (0.634 vs 0.602) — consistent with the gate opening in low light; ground-truthed night accuracy in progress. Now collecting adversarial data at the 8 checkpoint cameras (night/sunrise/rain) for targeted fine-tuning on border traffic. New weights pushed to HF and app.py updated to 10-class schema once fine-tuning is done.
 
 ---
 
@@ -331,7 +331,7 @@ Google Drive (raw LTA images)
               CATI Phase 1 + 2 training on Singapore-labelled data
 ```
 
-Notebook `10_label_sg_vehicles.ipynb` (Colab) runs the full Grounding DINO pass on Drive images and outputs YOLO labels + annotated review JPEGs. **GDino labelling complete** — ~1,800 images. Initial Phase 3 training done: CATI mAP50=0.572, ablation mAP50=0.541, true CATI contribution +0.031 on clean val; +7.5% detection rate over ablation in pre-dawn conditions (05:00–06:00 SGT). Adversarial data collection at checkpoint cameras ongoing — fine-tuning and production deployment pending.
+Notebook `10_label_sg_vehicles.ipynb` (Colab) runs the full Grounding DINO pass on Drive images and outputs YOLO labels + annotated review JPEGs. **GDino labelling complete** — ~1,800 images. Initial Phase 3 training done: CATI mAP50=0.572, ablation mAP50=0.541, true CATI contribution +0.031 on clean val; in pre-dawn frames (05:00–06:00 SGT) CATI produced ~7.5% more detections than the ablation at higher average confidence (0.634 vs 0.602) — consistent with the gate opening in low light; ground-truthed accuracy on a stratified night val set is in progress. Adversarial data collection at checkpoint cameras ongoing — fine-tuning and production deployment pending.
 
 ---
 
@@ -357,7 +357,7 @@ Insert a lightweight attention module before the backbone that activates when th
 
 At night, low-frequency components (large bright blobs) dominate; high-frequency texture features collapse. A frequency reweighting layer conditioned on the context encoder upweights low-frequency channels in dark frames, directing the backbone's attention toward headlight blob features rather than absent texture edges.
 
-**Expected outcome**: the +0.031 mAP gap on clean val and +7.5% detection gap in pre-dawn conditions are both measured with FiLM gates that barely opened after 25 epochs on 1,133 images. Phase 4 trains on a substantially larger adversarial dataset with hard negatives, more epochs, and explicit night-aware architecture — the condition-stratified mAP gap (CATI vs ablation on night-only val) is expected to be significantly larger than the aggregate +0.031.
+**Expected outcome**: the +0.031 mAP on clean val and the ~7.5% dets/img increase in pre-dawn frames are both from a model where the FiLM gates barely opened (25 epochs, 1,133 images, no night ground truth) — the signal is real but the mechanism was mostly inactive. Phase 4 trains on a substantially larger adversarial dataset with hard negatives, more epochs, and explicit night-aware architecture — the condition-stratified mAP gap (CATI vs ablation on night-only val) is expected to be significantly larger than the aggregate +0.031.
 
 ---
 
