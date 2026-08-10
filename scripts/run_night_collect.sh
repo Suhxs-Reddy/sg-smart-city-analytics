@@ -35,6 +35,12 @@ if [ $? -ne 0 ]; then
 fi
 
 # Upload HF token as a file to avoid shell escaping issues with the token string
+if [ ! -f ~/.cache/huggingface/token ]; then
+    echo "ERROR: ~/.cache/huggingface/token not found."
+    echo "Run: huggingface-cli login   (one-time setup)"
+    $COLAB stop -s "$SESSION" || true
+    exit 1
+fi
 HF_TOK_FILE=$(mktemp /tmp/hf_tok.XXXXXX)
 cat ~/.cache/huggingface/token > "$HF_TOK_FILE"
 $COLAB upload -s "$SESSION" "$HF_TOK_FILE" /content/.hf_token
