@@ -1,6 +1,6 @@
 # 🇸🇬 Singapore Smart City — CATI Traffic Intelligence
 
-**Context-Aware Traffic Intelligence: a FiLM-conditioned YOLOv11 detector that adapts to environment at inference time, deployed live against all 90 Singapore LTA expressway cameras.**
+**Context-Aware Traffic Intelligence: a FiLM-conditioned YOLOv11 detector that adapts to environment at inference time, deployed live against Singapore's LTA camera network.**
 
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-HF%20Space-yellow)](https://huggingface.co/spaces/SuhxsReddy/SingaporeAnalytics)
 [![Dataset](https://img.shields.io/badge/Dataset-213k%2B%20records-blue)](https://huggingface.co/datasets/SuhxsReddy/cati-singapore-dataset)
@@ -13,16 +13,23 @@
 
 ## What's Running
 
-A Streamlit dashboard deployed on Hugging Face Spaces runs continuous inference against Singapore's full expressway network. Every 90 seconds:
+A Streamlit dashboard deployed on Hugging Face Spaces runs continuous inference against Singapore's LTA camera network. Every 90 seconds:
 
-1. All 90 LTA camera images are fetched from [data.gov.sg](https://data.gov.sg)
+1. Live LTA camera images are fetched from [data.gov.sg](https://data.gov.sg)
 2. CATI runs vehicle detection conditioned on live weather, PM2.5, and time-of-day
 3. Per-camera directional counts are computed (vehicles heading each way per road)
 4. Results are appended to a public HF dataset and rendered on a live Folium map
 
-**213k+ detection records from a 15-day initial run in April 2026**, preserved on HF through pipeline downtime. The Space runs continuous inference — every 90 seconds it sweeps all 90 cameras and appends one row per camera to the public dataset. Schema: 25 columns including per-class vehicle counts, directional split, weather condition, road assignment, and model version. EC2-based continuous collection coming once Phase 3 is done.
+**Two distinct data phases:**
 
-**Phase 3 retraining in progress.** The current deployed model (Phase 2) was trained on COCO pseudo-labels — vehicle classes are approximate. Phase 3 replaces these with Grounding DINO auto-labels under a 10-class Singapore-specific taxonomy (car, motorcycle, scooter, bus, van, lorry, container truck, prime mover, tipper truck, taxi). GDino auto-labelling is complete (~1,800 images across all 90 cameras). Dataset build and training next — new weights pushed to the Space once done.
+| Phase | Cameras | Period | Coverage | Records |
+|-------|---------|--------|----------|---------|
+| Historical | 90 LTA expressway cameras (320×240) | April 2026 — 15-day run | Full Singapore road network | 213K+ |
+| Current live | 8 LTA checkpoint cameras (1920×1080) | July 2026 → ongoing | Woodlands, Tuas, Sentosa Gateway | Growing |
+
+From 30 June 2026, LTA decommissioned the 320×240 expressway camera feed and retained only 8 high-resolution cameras at Singapore's two land border crossings (Woodlands Checkpoint and Tuas Second Link) and Sentosa Gateway. These are three of the highest-traffic chokepoints in Singapore — Woodlands and Tuas handle over 500,000 daily crossings between Singapore and Malaysia. The live feed now delivers deep checkpoint analytics: cross-border vehicle flow, heavy goods vehicle classification at Tuas, and tourist traffic patterns at Sentosa.
+
+**Phase 3 training complete.** Model retrained on a 10-class Singapore-specific taxonomy (car, motorcycle, scooter, bus, van, lorry, container truck, prime mover, tipper truck, taxi) using Grounding DINO auto-labels across ~1,800 images. CATI mAP50: 0.572 vs ablation (fine-tuned YOLO, no conditioning) 0.541 — true CATI contribution +0.031 on clean val. Adversarial (night/sunrise) benchmarking shows +7.5% detection rate over ablation in low-light conditions. Weights pushed to HF once checkpoint-specific fine-tuning is complete.
 
 ---
 
@@ -30,7 +37,7 @@ A Streamlit dashboard deployed on Hugging Face Spaces runs continuous inference 
 
 Generic object detectors — YOLO, Faster R-CNN, DETR — treat every input frame identically. The same convolutional filters extract features from a clear midday highway shot and a rain-soaked 3 AM image from a degraded 320×240 camera. For a general-purpose detector this is necessary; it has no choice.
 
-**Singapore's LTA camera network is not general-purpose.** It is 90 fixed cameras at known locations, on known roads, in a tropical city with predictable weather patterns. At inference time, the system knows:
+**Singapore's LTA camera network is not general-purpose.** These are fixed cameras at known locations, on known roads, in a tropical city with predictable weather patterns. At inference time, the system knows:
 
 | Signal | Source | Information content |
 |--------|--------|---------------------|
@@ -38,7 +45,7 @@ Generic object detectors — YOLO, Faster R-CNN, DETR — treat every input fram
 | Weather | NEA API (real-time) | Rain attenuates contrast; haze flattens textures |
 | PM2.5 | NEA air quality API | Quantified visibility reduction |
 | Time of day | Timestamp | Lighting regime, shadow angles, traffic density priors |
-| Resolution | Camera spec | 78 cameras @ 1080p, 11 @ 320×240 |
+| Resolution | Camera spec | All current cameras @ 1920×1080 |
 
 Standard approach: ignore all of this at inference time and run COCO-pretrained weights unchanged.
 
@@ -103,7 +110,7 @@ YOLOv11s has **9.4M parameters**. CATI adds **~130K** — **1.4% overhead**, wit
 
 | Component | Parameters | Notes |
 |-----------|-----------|-------|
-| Per-camera embeddings | 1,440 | 90 cameras × 16-dim learned vectors |
+| Per-camera embeddings | 128 | 8 cameras × 16-dim learned vectors (expandable) |
 | Context Encoder (MLP) | ~18K | weather + time + GPS + PM2.5 → 256-dim |
 | FiLM Generator × 3 | ~96K | One per pyramid level (P3/P4/P5); outputs γ, β per channel |
 | Adaptive Gates × 3 | ~3K | Scalar α per level, conditioned on context |
@@ -140,8 +147,8 @@ Input: [weather_id, temperature, hour_sin, hour_cos, cam_embedding(16), resoluti
 | Field | Detail |
 |-------|--------|
 | Records | **213,000+** (growing — live collection every 90s) |
-| Date range | April 2026 (15-day initial run) |
-| Cameras | All 90 LTA expressway cameras |
+| Historical dataset | April 2026, 15-day run — 90 LTA expressway cameras, full city coverage |
+| Current live feed | July 2026 → ongoing — 8 checkpoint cameras (Woodlands × 3, Tuas × 3, Sentosa × 2) |
 | Collection interval | 90 seconds per full sweep |
 | Schema version | v2: ground-truth direction anchors, N-direction visibility |
 
@@ -163,7 +170,7 @@ The dataset also contains annotated detection images from the first inference sw
 
 Mapping LTA camera IDs to roads, directions, and geographic positions required more than a lookup table. `src/network/` encodes a full directed graph:
 
-- **`camera_config.json`** — authoritative ground truth derived by OCR-reading LTA's own text overlays from actual camera images. Covers all 90 cameras with road name, direction labels (e.g. "towards Changi" / "towards City"), lane anchor coordinates, junction flags.
+- **`camera_config.json`** — authoritative ground truth derived by OCR-reading LTA's own text overlays from actual camera images. Covers all cameras with road name, direction labels (e.g. "towards JB" / "towards City"), lane anchor coordinates, junction flags.
 - **`camera_network.py`** — builds a `networkx` DiGraph where nodes are cameras and directed edges encode road flow direction. Uses PCA on lat/lon to determine the principal road axis (handles E-W roads like PIE and AYE correctly, where naive N-S sorting fails).
 - **`visibility.py`** — determines how many traffic directions are visible per camera. v7 adds head-on camera y-anchors and a signpost filter to suppress false direction counts from visible road signs.
 - **`lane_detector.py`** — 2-frame IoU tracking to assign individual vehicle detections to directional lanes without full re-ID, keeping it lightweight enough to run every sweep.
@@ -200,8 +207,8 @@ The backbone is unfrozen with a deliberately low LR (1e-4) to prevent catastroph
 
 **[suhxsreddy-singaporeanalytics.hf.space](https://huggingface.co/spaces/SuhxsReddy/SingaporeAnalytics)**
 
-- Folium map with all 90 cameras, markers colour-coded by road (CTE purple, PIE blue, ECP cyan, AYE green, etc.)
-- Per-road KPI panels: total vehicles, directional split (e.g. "towards Changi: 142 / towards City: 89"), per-class breakdown
+- Folium map with all active cameras, markers colour-coded by checkpoint location
+- Per-camera KPI panels: total vehicles, directional split (e.g. "towards JB: 142 / towards SG: 89"), per-class breakdown
 - Real-time weather from NEA API
 - Dataset record counter (live row count from HF)
 - Auto-refreshes every 90 seconds in sync with the inference loop
@@ -256,24 +263,23 @@ notebooks/                      # Full pipeline in execution order
 
 ---
 
-## Current Limitation & Phase 3: Singapore Vehicle Taxonomy
+## Phase 3: Singapore Vehicle Taxonomy
 
-### The Oversight
+### The Problem (Phase 2)
 
-The current model uses **COCO-pretrained weights with 6 generic classes** (`car, motorcycle, bus, truck, van, lorry`). This produces systematic miscounts because COCO's taxonomy was not designed for Singapore's expressway vehicle mix:
+The Phase 2 model used **COCO-pretrained weights with 6 generic classes** (`car, motorcycle, bus, truck, van, lorry`). This produced systematic miscounts because COCO's taxonomy was not designed for Singapore's vehicle mix:
 
-| What's on the road | What COCO calls it | Error |
+| What's on the road | What COCO called it | Error |
 |---|---|---|
 | Container truck (articulated) | `truck` | Road load severely underestimated — 2× footprint ignored |
 | Prime mover (no container) | `truck` or `car` | Often missed or misclassified |
 | Tipper / construction truck | `truck` | Conflated with container trucks |
 | Scooter / moped | `motorcycle` | Different behaviour, different lane discipline |
 | Taxi | `car` | High stop-start behaviour invisible to analytics |
-| School / shuttle bus | `truck` | Misclassified |
 
-Near MCE, AYE, and Tuas — roads that carry heavy port freight — the container truck misclassification alone means congestion scores are materially wrong.
+At Tuas Checkpoint — Singapore's primary heavy freight border crossing — the container truck misclassification alone meant congestion and load scores were materially wrong.
 
-### Phase 3: Singapore-Specific Vehicle Taxonomy
+### Phase 3: Singapore-Specific Vehicle Taxonomy (Complete)
 
 **10-class taxonomy designed for LTA expressway camera angles:**
 
@@ -325,7 +331,7 @@ Google Drive (raw LTA images)
               CATI Phase 1 + 2 training on Singapore-labelled data
 ```
 
-Notebook `10_label_sg_vehicles.ipynb` (Colab) runs the full Grounding DINO pass on Drive images and outputs YOLO labels + annotated review JPEGs. **Complete** — ~1,800 images labelled across all 90 cameras.
+Notebook `10_label_sg_vehicles.ipynb` (Colab) runs the full Grounding DINO pass on Drive images and outputs YOLO labels + annotated review JPEGs. **Complete** — ~1,800 images labelled. Phase 3 training results: CATI mAP50=0.572, ablation mAP50=0.541, true CATI contribution +0.031 on clean val. Night/low-light benchmark: CATI finds +7.5% more vehicles than ablation in pre-dawn conditions (05:00–06:00 SGT). Adversarial data collection ongoing for checkpoint-specific fine-tuning.
 
 ---
 
