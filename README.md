@@ -82,7 +82,7 @@ CONTEXT BRANCH                        VISION BRANCH
   │   Encoder   │──── (γ₁,β₁,γ₂,β₂,γ₃,β₃)─►│
   │   (MLP)     │                    ┌───────▼────────┐
   └─────────────┘                    │  Detection     │
-                                     │  Head (6 cls)  │
+                                     │  Head (10 cls) │
                                      └────────────────┘
 ```
 
