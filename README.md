@@ -41,7 +41,7 @@ Generic object detectors (YOLO, Faster R-CNN) treat every frame identically — 
 | Camera ID | Fixed deployment | Same viewpoint always — learnable spatial priors |
 | Weather | data.gov.sg API | Rain/haze degrades features differently than clear sky |
 | Time | Timestamp | Lighting, shadows, traffic density vary |
-| Resolution | Camera spec | 78 cameras @ 1080p, 11 @ 320x240 |
+| Resolution | Camera spec | 8 active cameras @ 1920×1080 |
 | PM2.5 | Air quality API | Haze reduces visibility and contrast |
 
 **No published traffic detector uses environmental metadata to modulate the detection backbone.**
@@ -74,14 +74,14 @@ CONTEXT BRANCH                    VISION BRANCH
  │ (MLP → γ,β)  │──── FiLM ──────────>│
  └──────────────┘               ┌──────▼───────┐
                                 │ Detection    │
-                                │ Head (6 cls) │
+                                │ Head (10 cls)│
                                 └──────────────┘
 ```
 
 ### Key Design Decisions
 
 - **FiLM init = identity**: γ=1, β=0 at initialization, so the model starts equivalent to vanilla YOLO
-- **Per-camera embeddings**: Each of 90 cameras gets a learned 16-dim embedding, capturing viewpoint priors
+- **Per-camera embeddings**: Each of the 8 active checkpoint cameras has a learned 16-dim embedding capturing viewpoint priors
 - **Cyclical time encoding**: sin/cos encoding avoids midnight discontinuity
 - **~130K overhead**: CATI adds ~130K parameters to YOLO's 9.4M — 1.4% overhead, negligible inference cost
 
@@ -126,19 +126,12 @@ src/
 
 ## Data Collection
 
-Images are collected from Singapore's [LTA Traffic Images API](https://data.gov.sg/datasets/d_62ff3afe7f0f43ceab65e7431dd4415d/view) every 60 seconds, along with metadata from:
+The 8 checkpoint cameras are polled every 90 seconds via Singapore's [LTA Traffic Images API](https://data.gov.sg/datasets/d_62ff3afe7f0f43ceab65e7431dd4415d/view). Each sweep also pulls:
 
-- **Weather**: 24-hour forecast + air temperature
-- **Air Quality**: PM2.5 readings by region
-- **Taxi GPS**: ~30,000 taxi positions for traffic proxy
+- **Weather**: NEA 24-hour forecast + air temperature
+- **Air Quality**: NEA PM2.5 readings by region
 
-```bash
-# Quick 6-minute test
-python -m src.ingestion.collector --duration 0.1
-
-# 24-hour collection
-python -m src.ingestion.collector --duration 24
-```
+All training, data collection scripts, and the GDino labelling pipeline live on the [`fresh`](https://github.com/Suhxs-Reddy/sg-smart-city-analytics/tree/fresh) branch.
 
 ## Development
 
