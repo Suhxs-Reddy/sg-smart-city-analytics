@@ -361,6 +361,43 @@ At night, low-frequency components (large bright blobs) dominate; high-frequency
 
 ---
 
+## Branch Organisation
+
+This repo has **two branches with no common ancestor** — they serve completely different purposes and cannot be merged.
+
+| Branch | Purpose | What it contains |
+|--------|---------|-----------------|
+| `fresh` | Research, training, data pipeline | Full CATI architecture (`src/`), all notebooks, data collection scripts, training configs, GDino labelling pipeline, Phase 3/4 work. This is where all ML development happens. |
+| `main` | HF Space deployment | `app.py` (Streamlit dashboard), `Dockerfile`, `server.py` (FastAPI), `requirements.txt`. Picks up model weights from HF Hub. No training code. |
+
+**Why separate?** `main` was initialised independently when the HF Space was set up. `fresh` carries the full research history (90-camera network, graph construction, training experiments). Merging would surface hundreds of training-only dependencies that break the Space's slim deployment image and confuse the HF Spaces build system.
+
+**Workflow:** train on `fresh` → push weights to [HF Model Hub](https://huggingface.co/SuhxsReddy/cati-singapore) → `main`'s `app.py` loads weights from HF at Space startup. The two branches are linked through HF, not through git.
+
+**If you're here to understand the model:** start on `fresh`. Read the notebooks in order (`01_` → `10_`), then `src/models/` for the architecture.
+
+**If you're here to run the live demo:** see [main](https://github.com/Suhxs-Reddy/sg-smart-city-analytics/tree/main) or visit the [HF Space](https://huggingface.co/spaces/SuhxsReddy/SingaporeAnalytics) directly.
+
+### `fresh` Branch: Key Scripts
+
+```
+scripts/
+├── collect_data_colab.py          # Async LTA collector — normal daytime collection
+├── collect_night_baseline_colab.py# Colab notebook version of night collector (4 cells)
+├── collect_night_standalone.py    # Pure-Python night collector for `colab exec --file`
+│                                  # Phase-aware (dusk/night/pre_dawn/dawn), per-frame
+│                                  # quality metrics (blur, brightness, contrast, blob_count)
+│                                  # Flags: is_challenging, is_candidate_neg
+│                                  # Output: Drive/sg_smart_city/data/raw_night_baseline/night_YYYY-MM-DD/
+├── run_night_collect.sh           # Cron wrapper — opens Colab session, mounts Drive,
+│                                  # uploads script, runs with 6h timeout, logs to logs/
+└── label_sg_vehicles.py           # GDino auto-labelling pipeline (CONF_AUTO threshold)
+```
+
+**Night collection automation:** `run_night_collect.sh` is invoked by a macOS crontab (IST timezone) at 18:30 SGT and 00:30 SGT nightly. `caffeinate -i` prevents Mac sleep during the 6-hour collection window. Logs in `logs/night-YYYYMMDD-HHMM.log`.
+
+---
+
 ## Development
 
 ```bash
