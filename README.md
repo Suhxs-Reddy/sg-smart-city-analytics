@@ -29,7 +29,7 @@ A Streamlit dashboard deployed on Hugging Face Spaces runs continuous inference 
 
 From 30 June 2026, LTA decommissioned the 320×240 expressway camera feed and retained only 8 high-resolution cameras at Singapore's two land border crossings (Woodlands Checkpoint and Tuas Second Link) and Sentosa Gateway. These are three of the highest-traffic chokepoints in Singapore — Woodlands and Tuas handle over 500,000 daily crossings between Singapore and Malaysia. The live feed now delivers deep checkpoint analytics: cross-border vehicle flow, heavy goods vehicle classification at Tuas, and tourist traffic patterns at Sentosa.
 
-**Phase 3 training complete.** Model retrained on a 10-class Singapore-specific taxonomy (car, motorcycle, scooter, bus, van, lorry, container truck, prime mover, tipper truck, taxi) using Grounding DINO auto-labels across ~1,800 images. CATI mAP50: 0.572 vs ablation (fine-tuned YOLO, no conditioning) 0.541 — true CATI contribution +0.031 on clean val. Adversarial (night/sunrise) benchmarking shows +7.5% detection rate over ablation in low-light conditions. Weights pushed to HF once checkpoint-specific fine-tuning is complete.
+**Phase 3 in progress.** Initial retraining on a 10-class Singapore-specific taxonomy (car, motorcycle, scooter, bus, van, lorry, container truck, prime mover, tipper truck, taxi) complete — CATI mAP50=0.572 vs ablation 0.541, +7.5% detection in pre-dawn conditions. Now collecting adversarial data at the 8 checkpoint cameras (night/sunrise/rain) for targeted fine-tuning on border traffic. New weights pushed to HF and app.py updated to 10-class schema once fine-tuning is done.
 
 ---
 
@@ -331,7 +331,7 @@ Google Drive (raw LTA images)
               CATI Phase 1 + 2 training on Singapore-labelled data
 ```
 
-Notebook `10_label_sg_vehicles.ipynb` (Colab) runs the full Grounding DINO pass on Drive images and outputs YOLO labels + annotated review JPEGs. **Complete** — ~1,800 images labelled. Phase 3 training results: CATI mAP50=0.572, ablation mAP50=0.541, true CATI contribution +0.031 on clean val. Night/low-light benchmark: CATI finds +7.5% more vehicles than ablation in pre-dawn conditions (05:00–06:00 SGT). Adversarial data collection ongoing for checkpoint-specific fine-tuning.
+Notebook `10_label_sg_vehicles.ipynb` (Colab) runs the full Grounding DINO pass on Drive images and outputs YOLO labels + annotated review JPEGs. **GDino labelling complete** — ~1,800 images. Initial Phase 3 training done: CATI mAP50=0.572, ablation mAP50=0.541, true CATI contribution +0.031 on clean val; +7.5% detection rate over ablation in pre-dawn conditions (05:00–06:00 SGT). Adversarial data collection at checkpoint cameras ongoing — fine-tuning and production deployment pending.
 
 ---
 
