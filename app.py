@@ -242,21 +242,14 @@ tab_map, tab_feeds = st.tabs(["🗺️  Map", "📷  Live Feeds"])
 # TAB 1 — MAP
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_map:
+    # Create map with explicit OpenStreetMap (avoid Carto defaults)
     m = folium.Map(
         location=SG_CENTER,
         zoom_start=11,
-        tiles=None,
+        tiles="OpenStreetMap",
         prefer_canvas=True,
+        no_touch=False,
     )
-    # Explicitly add only OpenStreetMap, no Carto fallback
-    folium.TileLayer(
-        url="https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-        attr="&copy; OpenStreetMap contributors",
-        name="OpenStreetMap",
-        overlay=False,
-        control=False,
-        max_zoom=19,
-    ).add_to(m)
 
     cam_lookup = {c["camera_id"]: c for c in cameras}
 
