@@ -1,23 +1,12 @@
 """
-FiLM — Feature-wise Linear Modulation (Upgraded)
+FiLM — Feature-wise Linear Modulation with Adaptive Gating
 
-Perez et al., "FiLM: Visual Reasoning with a General Conditioning Layer" (AAAI 2018)
+Extends Perez et al. (AAAI 2018) with:
+  - AdaptiveFiLMLayer: residual gating learns when to apply conditioning
+  - Channel-wise attention: selective amplification before FiLM
+  - Multi-scale support: per-level generators for backbone P3/P4/P5 and neck
 
-Extended for CATI (Context-Aware Traffic Intelligence) with:
-    1. AdaptiveFiLMLayer — residual gating that learns when to apply conditioning
-    2. AttentionFiLMLayer — CBAM post-attention for selective amplification
-    3. SpectralNorm projections — stabilize gamma/beta during training
-    4. Multi-scale aware generation — separate projection heads per feature scale
-
-Novel contribution: No prior traffic detection system combines FiLM conditioning
-with adaptive gating and attention. This lets the model learn that, e.g., edge
-detection channels don't need weather adaptation but texture channels do.
-
-In Singapore context:
-    - Clear day, 1080p camera: gate α ≈ 0 → mostly vanilla YOLO
-    - Heavy rain, night, 240p camera: gate α ≈ 1 → full FiLM conditioning
-    - Per-channel attention: road surface channels get more rain adaptation
-      than sky/building channels
+Reference: Perez et al., "FiLM: Visual Reasoning with a General Conditioning Layer" (AAAI 2018)
 """
 
 import torch

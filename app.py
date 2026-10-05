@@ -73,7 +73,18 @@ ROAD_COLOR = {
     "ECP": "#26c6da",
     "—": "#78909c",
 }
-CATI_CLASSES = ["car", "motorcycle", "bus", "truck", "van", "lorry"]
+CATI_CLASSES = [
+    "car",
+    "motorcycle",
+    "scooter",
+    "bus",
+    "van",
+    "lorry",
+    "container_truck",
+    "prime_mover",
+    "tipper_truck",
+    "taxi",
+]
 
 HF_MODEL_REPO = "SuhxsReddy/cati-singapore"
 
@@ -153,10 +164,11 @@ def get_model():
         cati_path = hf_hub_download(repo_id=HF_MODEL_REPO, filename="cati_best.pt")
         yolo_path = hf_hub_download(repo_id=HF_MODEL_REPO, filename="yolo_backbone.pt")
         config = CATIConfig(
+            num_classes=10,
             use_context_augmentation=False,
-            conf_threshold=0.15,
-            neck_channels=[128, 256, 512],  # Phase 2 trained with neck FiLM
-            img_size=1280,  # 2x resolution catches distant/small vehicles
+            conf_threshold=0.25,
+            neck_channels=[128, 256, 512],
+            img_size=1280,
         )
         return CATIBackboneWrapper(
             yolo_model_path=yolo_path, config=config, cati_weights_path=cati_path, device="cpu"
@@ -255,10 +267,14 @@ def _direction_from_frames(dets1: list[dict], dets2: list[dict]) -> tuple[int, i
 CATI_CLASS_COLORS = {
     "car": "#58a6ff",
     "motorcycle": "#f78166",
+    "scooter": "#fb8500",
     "bus": "#3fb950",
-    "truck": "#d29922",
     "van": "#bc8cff",
     "lorry": "#ff7b72",
+    "container_truck": "#ffd60a",
+    "prime_mover": "#e76f51",
+    "tipper_truck": "#2a9d8f",
+    "taxi": "#264653",
 }
 
 
@@ -426,10 +442,8 @@ def _run_inference_loop(state: dict, model):
                 w, h = img.size
                 with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
                     img.save(tmp.name)
-                    model.config.conf_threshold = 0.08
-                    model.config.iou_threshold = (
-                        0.20  # lower → separate side-by-side + articulated vehicles
-                    )
+                    model.config.conf_threshold = 0.25
+                    model.config.iou_threshold = 0.45
                     result = model.predict(
                         image_path=tmp.name,
                         camera_id=int(cam_id) % 90,

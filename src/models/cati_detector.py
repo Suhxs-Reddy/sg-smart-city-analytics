@@ -1,41 +1,11 @@
 """
-CATI — Context-Aware Traffic Intelligence Detector (Production Grade)
+CATI — Context-Aware Traffic Intelligence Detector
 
-A novel detection architecture that conditions YOLOv11's feature extraction on
-environmental metadata using Feature-wise Linear Modulation (FiLM) with
-adaptive gating and channel/spatial attention.
+A FiLM-conditioned YOLOv11 detector that adapts to environmental context
+(weather, time of day, camera ID, air quality) at inference time via
+adaptive gating and feature-wise linear modulation (FiLM).
 
-Architecture overview:
-    ┌─────────────────────────────────────────────────────────────┐
-    │                    CATI Detector                             │
-    │                                                             │
-    │  1. YOLO backbone processes image → P3, P4, P5 features    │
-    │  2. Forward hooks intercept features at each stage          │
-    │  3. Context encoder processes metadata → context vector     │
-    │  4. FiLM generator produces (γ, β) per stage               │
-    │  5. AdaptiveFiLM applies gated conditioning + attention     │
-    │  6. Modified features continue to detection head            │
-    │  7. EMA model provides stable inference weights             │
-    └─────────────────────────────────────────────────────────────┘
-
-Key insight: At inference time on Singapore's LTA camera network, we know:
-    1. Which camera is being processed (fixed viewpoint → learnable priors)
-    2. Current weather conditions (from data.gov.sg API)
-    3. Time of day (lighting conditions, rush hour patterns)
-    4. Camera resolution (78 @ 1080p, 11 @ 320×240)
-    5. Air quality / PM2.5 (affects visibility)
-    6. Camera GPS location (spatial relationships)
-
-Novel contributions:
-    - First application of FiLM + adaptive gating to traffic detection
-    - Per-camera GPS positional encoding captures spatial priors
-    - Context-dependent gating learns when conditioning helps vs. hurts
-    - CBAM post-attention selectively amplifies useful conditioning
-    - ~300K parameter overhead on a 9.4M backbone
-
-Reference:
-    Perez et al., "FiLM: Visual Reasoning with a General Conditioning Layer"
-    AAAI 2018 — adapted for environmental conditioning in traffic detection
+Reference: Perez et al., "FiLM: Visual Reasoning with a General Conditioning Layer" (AAAI 2018)
 """
 
 import copy
