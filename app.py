@@ -133,7 +133,7 @@ CHECKPOINT_META = {
         "cams": ["2701", "2702", "2704"],
         "color": "#42a5f5",
         "location": [1.4473, 103.7691],
-        "desc": "Malaysia–Singapore Causeway · 500K+ daily crossings",
+        "desc": "Malaysia-Singapore Causeway · 500K+ daily crossings",
     },
     "Tuas": {
         "cams": ["4703", "4712", "4713"],
