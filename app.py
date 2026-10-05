@@ -245,7 +245,7 @@ with tab_map:
     m = folium.Map(
         location=SG_CENTER,
         zoom_start=11,
-        tiles="CartoDB dark_matter",
+        tiles="OpenStreetMap",
         prefer_canvas=True,
     )
 
