@@ -293,11 +293,12 @@ def _run_inference_loop(state: dict, model):
 
     hf_token = os.environ.get("HF_TOKEN")
 
-    # Try loading existing network from HF Hub first
-    camera_net = CameraNetwork.load_from_hub(hf_token)
+    # Try loading existing network from HF Hub (requires HF_TOKEN)
+    camera_net = None
+    if hf_token:
+        camera_net = CameraNetwork.load_from_hub(hf_token)
 
-    # If no network yet, build immediately with fallback directions (no OCR, ~1s)
-    # This ensures direction labels are correct from the very first sweep
+    # If no network yet, build immediately with fallback directions
     if camera_net is None:
         try:
             init_cameras = []
@@ -725,7 +726,7 @@ tab_map, tab_roads, tab_dataset = st.tabs(["🗺️  Map", "📊  Road Analytics
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_map:
     m = folium.Map(
-        location=SG_CENTER, zoom_start=11, tiles="CartoDB dark_matter", prefer_canvas=True
+        location=SG_CENTER, zoom_start=11, tiles="OpenStreetMap", prefer_canvas=True
     )
 
     for cam in cameras:
