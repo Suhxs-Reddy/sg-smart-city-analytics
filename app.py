@@ -73,18 +73,7 @@ ROAD_COLOR = {
     "ECP": "#26c6da",
     "—": "#78909c",
 }
-CATI_CLASSES = [
-    "car",
-    "motorcycle",
-    "scooter",
-    "bus",
-    "van",
-    "lorry",
-    "container_truck",
-    "prime_mover",
-    "tipper_truck",
-    "taxi",
-]
+CATI_CLASSES = ["car", "motorcycle", "bus", "truck", "van", "lorry"]
 
 HF_MODEL_REPO = "SuhxsReddy/cati-singapore"
 
@@ -164,7 +153,6 @@ def get_model():
         cati_path = hf_hub_download(repo_id=HF_MODEL_REPO, filename="cati_best.pt")
         yolo_path = hf_hub_download(repo_id=HF_MODEL_REPO, filename="yolo_backbone.pt")
         config = CATIConfig(
-            num_classes=10,
             use_context_augmentation=False,
             conf_threshold=0.25,
             neck_channels=[128, 256, 512],
@@ -267,14 +255,10 @@ def _direction_from_frames(dets1: list[dict], dets2: list[dict]) -> tuple[int, i
 CATI_CLASS_COLORS = {
     "car": "#58a6ff",
     "motorcycle": "#f78166",
-    "scooter": "#fb8500",
     "bus": "#3fb950",
+    "truck": "#d29922",
     "van": "#bc8cff",
     "lorry": "#ff7b72",
-    "container_truck": "#ffd60a",
-    "prime_mover": "#e76f51",
-    "tipper_truck": "#2a9d8f",
-    "taxi": "#264653",
 }
 
 
