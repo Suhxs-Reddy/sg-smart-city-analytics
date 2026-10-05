@@ -156,7 +156,8 @@ class TrackingStage(PipelineStage):
         model_path: str = "models/cati_latest.pt",
         max_frames: int | None = None,
     ) -> dict:
-        from src.tracking.tracker import Detection as TrackDet, SingaporeTracker
+        from src.tracking.tracker import Detection as TrackDet
+        from src.tracking.tracker import SingaporeTracker
 
         # Reads from DetectionStage JSONL outputs — run detect stage first
         det_dir = Path(self.dirs["detections"])

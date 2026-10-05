@@ -612,7 +612,8 @@ def _run_inference_loop(state: dict, model):
 
             hf_token = os.environ.get("HF_TOKEN")
             if hf_token and DATASET_PATH.exists():
-                local_rows = sum(1 for _ in open(DATASET_PATH)) - 1
+                with open(DATASET_PATH) as f:
+                    local_rows = sum(1 for _ in f) - 1
                 if local_rows >= hf_row_count:
                     api = HfApi()
                     api.create_repo(
