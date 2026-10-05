@@ -245,14 +245,17 @@ with tab_map:
     m = folium.Map(
         location=SG_CENTER,
         zoom_start=11,
+        tiles=None,
         prefer_canvas=True,
     )
+    # Explicitly add only OpenStreetMap, no Carto fallback
     folium.TileLayer(
-        tiles="https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-        attr="© OpenStreetMap contributors",
+        url="https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+        attr="&copy; OpenStreetMap contributors",
         name="OpenStreetMap",
         overlay=False,
-        control=True
+        control=False,
+        max_zoom=19,
     ).add_to(m)
 
     cam_lookup = {c["camera_id"]: c for c in cameras}
