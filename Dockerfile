@@ -8,9 +8,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN pip install --no-cache-dir \
     streamlit==1.32.0 \
-    streamlit-folium==0.18.0 \
+    streamlit-folium>=0.19.0 \
     streamlit-autorefresh==1.0.1 \
-    folium==0.16.0 \
+    folium>=0.20.0 \
     requests==2.31.0 \
     Pillow==10.0.0
 
